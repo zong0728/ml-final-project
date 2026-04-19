@@ -1,0 +1,12 @@
+results/
+notes/
+dataset/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+*.egg-info/
+.claude/
+.vscode/
+.idea/
+*.swp

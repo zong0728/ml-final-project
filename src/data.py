@@ -1,0 +1,304 @@
+"""Data loading, cleaning, scaling, and sliding-window construction.
+
+Key design choices:
+  * Future weather during the forecast horizon is NEVER used as a feature —
+    only the history up to and including the forecast origin is visible.
+  * Val split: last `VAL_HOURS` of training are held out as the outer val set.
+  * All z-scoring statistics are fit on the training-only portion.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
+import pandas as pd
+import xarray as xr
+
+from . import config
+
+
+# ============================================================================
+# Raw loaders
+# ============================================================================
+
+def load_raw() -> tuple[xr.Dataset, xr.Dataset, xr.Dataset]:
+    """Open the three .nc datasets."""
+    ds_train = xr.open_dataset(config.TRAIN_PATH)
+    ds_test_24h = xr.open_dataset(config.TEST_24H_PATH)
+    ds_test_48h = xr.open_dataset(config.TEST_48H_PATH)
+    return ds_train, ds_test_24h, ds_test_48h
+
+
+def drop_zero_variance_features(ds: xr.Dataset, ref: xr.Dataset | None = None) -> xr.Dataset:
+    """Remove weather features with ~zero variance in `ref` (defaults to ds itself)."""
+    ref = ref if ref is not None else ds
+    w = ref.weather.values
+    F = w.shape[-1]
+    stds = np.nanstd(w.reshape(-1, F), axis=0)
+    valid = stds > 1e-6
+    keep = [f for f, v in zip(list(ref.feature.values), valid) if v]
+    return ds.sel(feature=keep)
+
+
+def split_train_val(ds_train: xr.Dataset, val_hours: int = config.VAL_HOURS):
+    """Hold out the last `val_hours` of training as outer validation."""
+    T = len(ds_train.timestamp)
+    ds_fit = ds_train.isel(timestamp=slice(0, T - val_hours))
+    ds_val = ds_train.isel(timestamp=slice(T - val_hours, T))
+    return ds_fit, ds_val
+
+
+# ============================================================================
+# Core matrices — outage (T, L) and weather (T, L, F)
+# ============================================================================
+
+def get_arrays(ds: xr.Dataset) -> tuple[np.ndarray, np.ndarray, list[str], list[str], pd.DatetimeIndex]:
+    """Returns (out, weather, locations, features, timestamps)."""
+    out = ds.out.transpose("timestamp", "location").values.astype(np.float32)
+    weather = ds.weather.transpose("timestamp", "location", "feature").values.astype(np.float32)
+    locations = [str(x) for x in ds.location.values]
+    features = [str(x) for x in ds.feature.values]
+    timestamps = pd.to_datetime(ds.timestamp.values)
+    return out, weather, locations, features, timestamps
+
+
+# ============================================================================
+# Scalers
+# ============================================================================
+
+@dataclass
+class Scalers:
+    """Training-only z-score statistics used by NN models."""
+    y_mu: float
+    y_sd: float
+    w_mu: np.ndarray  # (F,)
+    w_sd: np.ndarray  # (F,)
+
+    def scale_y(self, y: np.ndarray) -> np.ndarray:
+        return (y - self.y_mu) / self.y_sd
+
+    def inv_y(self, y: np.ndarray) -> np.ndarray:
+        return y * self.y_sd + self.y_mu
+
+    def scale_w(self, w: np.ndarray) -> np.ndarray:
+        return (w - self.w_mu) / self.w_sd
+
+
+def fit_scalers(out: np.ndarray, weather: np.ndarray) -> Scalers:
+    y_mu = float(np.nanmean(out))
+    y_sd = float(max(np.nanstd(out), 1e-6))
+    F = weather.shape[-1]
+    flat = weather.reshape(-1, F)
+    w_mu = np.nanmean(flat, axis=0).astype(np.float32)
+    w_sd = np.nanstd(flat, axis=0).astype(np.float32)
+    w_sd = np.where(w_sd < 1e-6, 1.0, w_sd)
+    return Scalers(y_mu=y_mu, y_sd=y_sd, w_mu=w_mu, w_sd=w_sd)
+
+
+# ============================================================================
+# Calendar features (leak-free: only uses timestamp)
+# ============================================================================
+
+def calendar_features(timestamps: np.ndarray | pd.DatetimeIndex) -> np.ndarray:
+    """Cyclical encoding: sin/cos of hour-of-day, day-of-week, month."""
+    ts = pd.to_datetime(timestamps)
+    hour = ts.hour.to_numpy()
+    dow = ts.dayofweek.to_numpy()
+    month = ts.month.to_numpy()
+    feats = np.stack(
+        [
+            np.sin(2 * np.pi * hour / 24),
+            np.cos(2 * np.pi * hour / 24),
+            np.sin(2 * np.pi * dow / 7),
+            np.cos(2 * np.pi * dow / 7),
+            np.sin(2 * np.pi * (month - 1) / 12),
+            np.cos(2 * np.pi * (month - 1) / 12),
+        ],
+        axis=1,
+    )
+    return feats.astype(np.float32)
+
+
+# ============================================================================
+# Sliding-window construction for NN models
+# ============================================================================
+
+def build_nn_windows(
+    out: np.ndarray,                 # (T, L) raw outage
+    weather: np.ndarray,             # (T, L, F) raw weather
+    scalers: Scalers,
+    seq_len: int,
+    horizon: int,
+    include_calendar: bool = True,
+    timestamps: np.ndarray | pd.DatetimeIndex | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Build sliding windows for every (location, time) pair.
+
+    Returns:
+      X_train: (N, seq_len, D) — features for training
+      Y_train: (N, horizon)   — target SCALED outage for training
+      X_last:  (L, seq_len, D) — last available window per location for inference
+
+    D = 1 (outage) + F (weather) + [6 (calendar) if include_calendar]
+    Target y is scaled with scalers; inverse via scalers.inv_y at inference.
+    """
+    T, L = out.shape
+    F = weather.shape[-1]
+
+    y_s = scalers.scale_y(out.astype(np.float32))           # (T, L)
+    w_s = scalers.scale_w(weather.astype(np.float32))       # (T, L, F)
+
+    # Calendar features are the same across locations at a given time.
+    if include_calendar:
+        assert timestamps is not None, "timestamps required when include_calendar=True"
+        cal = calendar_features(timestamps)                  # (T, 6)
+        cal_bcast = np.broadcast_to(cal[:, None, :], (T, L, cal.shape[1]))
+        x_per_step = np.concatenate([y_s[..., None], w_s, cal_bcast], axis=-1)
+    else:
+        x_per_step = np.concatenate([y_s[..., None], w_s], axis=-1)
+    # x_per_step: (T, L, D)
+
+    D = x_per_step.shape[-1]
+    N_per_county = T - seq_len - horizon + 1
+    if N_per_county <= 0:
+        raise ValueError(f"Not enough time steps: T={T}, seq_len={seq_len}, horizon={horizon}")
+
+    # Build arrays — vectorize across counties, loop over origin time.
+    X = np.empty((N_per_county * L, seq_len, D), dtype=np.float32)
+    Y = np.empty((N_per_county * L, horizon), dtype=np.float32)
+    for i in range(N_per_county):
+        # x_per_step[i:i+seq_len, :, :] has shape (seq_len, L, D)
+        X[i * L:(i + 1) * L] = x_per_step[i:i + seq_len].transpose(1, 0, 2)
+        Y[i * L:(i + 1) * L] = y_s[i + seq_len:i + seq_len + horizon].T  # (L, horizon)
+
+    X_last = x_per_step[T - seq_len:T].transpose(1, 0, 2).copy()  # (L, seq_len, D)
+
+    return X, Y, X_last
+
+
+# ============================================================================
+# Tabular lag matrix for tree / linear models — numpy-only, no pandas DataFrame.
+#
+# For each origin time t ∈ [t_start, T-horizon) and each county l, we create
+# `horizon` training rows with features:
+#   * Outage lags:    out[t], out[t-1], ..., out[t - max_lag]
+#   * Outage rolling: mean/std over the K hours ending at t
+#   * Weather at t:   w[t, l, :]            (no weather lags → keep feature count small)
+#   * Calendar at target (t+h): 6 cyclical features
+#   * Horizon step h: one scalar
+#   * Location index: one categorical (as ordinal — tree models can split on it)
+#
+# The rows for (origin t, county l, horizon h) are packed as
+#   row index = (t_rel * L + l) * horizon + (h - 1)
+# i.e. origin-major → county → horizon-step, to keep target alignment simple.
+# ============================================================================
+
+def build_lag_table(
+    out: np.ndarray,                      # (T, L)
+    weather: np.ndarray,                  # (T, L, F)
+    timestamps: pd.DatetimeIndex,
+    horizon: int,
+    lags: list[int] = config.LAG_FEATURES,
+    rolls: list[int] = config.ROLLING_WINDOWS,
+    origin_stride: int = 1,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[str]]:
+    """Build train (X, y) and inference X_inf for tree/linear models.
+
+    Returns
+    -------
+    X_tr : (N, P) float32
+    y_tr : (N,)   float32
+    X_inf : (L * horizon, P) float32 — features for predicting the next `horizon`
+            hours starting at timestamps[-1] + 1h, row-order
+            (h=1, l=0), (h=1, l=1), ..., (h=1, l=L-1), (h=2, l=0), ...
+    loc_ids_tr : (N,) int64 — location index for each training row (for debugging)
+    feature_names : list[str]
+    """
+    T, L = out.shape
+    F = weather.shape[-1]
+    max_lag = max([max(lags), max(rolls) if rolls else 0])
+
+    # ---- Outage lag features: shape (T, L, len(lags)) ----
+    lag_arr = np.full((T, L, len(lags)), np.nan, dtype=np.float32)
+    for j, k in enumerate(lags):
+        if k - 1 < T:
+            lag_arr[k - 1:, :, j] = out[: T - (k - 1), :]
+
+    # ---- Outage rolling mean/std: shape (T, L, 2*len(rolls)) ----
+    roll_arr = np.full((T, L, 2 * len(rolls)), np.nan, dtype=np.float32)
+    df_out = pd.DataFrame(out)
+    for j, w in enumerate(rolls):
+        roll_arr[:, :, 2 * j] = df_out.rolling(w, min_periods=1).mean().values.astype(np.float32)
+        roll_arr[:, :, 2 * j + 1] = df_out.rolling(w, min_periods=1).std().fillna(0.0).values.astype(np.float32)
+
+    # ---- Weather at t: shape (T, L, F) — no lags (kept compact) ----
+    weather_at_t = weather  # alias
+
+    # ---- Stack per-step features (excluding calendar-at-target and h_step) ----
+    feat_at_t = np.concatenate([lag_arr, roll_arr, weather_at_t], axis=-1)  # (T, L, P_base)
+    P_base = feat_at_t.shape[-1]
+
+    # ---- Calendar features for all timestamps ----
+    cal_all = calendar_features(timestamps)  # (T, 6)
+
+    # ---- Valid origin times ----
+    t_start = max_lag - 1
+    t_end = T - horizon        # last valid origin yields targets up to t+horizon
+    valid_origins = np.arange(t_start, t_end, origin_stride)
+    N_origins = len(valid_origins)
+    if N_origins == 0:
+        raise ValueError(f"No valid origins: T={T}, max_lag={max_lag}, horizon={horizon}")
+
+    P = P_base + 6 + 1 + 1  # + calendar(6) + h_step + location_idx
+    feature_names = (
+        [f"lag_{k}" for k in lags]
+        + [f"{s}_{w}" for w in rolls for s in ("rollmean", "rollstd")]
+        + [f"w_{i}" for i in range(F)]
+        + ["hour_sin", "hour_cos", "dow_sin", "dow_cos", "month_sin", "month_cos"]
+        + ["h_step", "location_idx"]
+    )
+
+    N_rows = N_origins * L * horizon
+    X_tr = np.empty((N_rows, P), dtype=np.float32)
+    y_tr = np.empty(N_rows, dtype=np.float32)
+    loc_ids_tr = np.empty(N_rows, dtype=np.int64)
+
+    loc_idx_arr = np.arange(L, dtype=np.float32)
+    row = 0
+    for t in valid_origins:
+        base = feat_at_t[t]                              # (L, P_base)
+        for h in range(1, horizon + 1):
+            cal_row = cal_all[t + h]                     # (6,)
+            X_tr[row:row + L, :P_base] = base
+            X_tr[row:row + L, P_base:P_base + 6] = cal_row
+            X_tr[row:row + L, P_base + 6] = h
+            X_tr[row:row + L, P_base + 7] = loc_idx_arr
+            y_tr[row:row + L] = out[t + h, :]
+            loc_ids_tr[row:row + L] = np.arange(L)
+            row += L
+
+    # ---- Drop rows with any NaN (early origins missing deep lags / rolling) ----
+    mask = np.isfinite(X_tr).all(axis=1)
+    X_tr = X_tr[mask]
+    y_tr = y_tr[mask]
+    loc_ids_tr = loc_ids_tr[mask]
+
+    # ---- Inference: origin t_inf = T-1, all counties, all horizons ----
+    t_inf = T - 1
+    base_inf = feat_at_t[t_inf]                          # (L, P_base)
+    future_ts = pd.DatetimeIndex(
+        [timestamps[t_inf] + pd.Timedelta(hours=h) for h in range(1, horizon + 1)]
+    )
+    cal_fut = calendar_features(future_ts)               # (horizon, 6)
+    X_inf = np.empty((L * horizon, P), dtype=np.float32)
+    for h_step in range(1, horizon + 1):
+        r0 = (h_step - 1) * L
+        X_inf[r0:r0 + L, :P_base] = base_inf
+        X_inf[r0:r0 + L, P_base:P_base + 6] = cal_fut[h_step - 1]
+        X_inf[r0:r0 + L, P_base + 6] = h_step
+        X_inf[r0:r0 + L, P_base + 7] = loc_idx_arr
+    X_inf = np.nan_to_num(X_inf, nan=0.0)
+
+    return X_tr, y_tr, X_inf, loc_ids_tr, feature_names
