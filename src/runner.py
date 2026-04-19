@@ -29,11 +29,14 @@ from .registry import MODEL_REGISTRY, ModelInfo
 from .training import already_ran, log_run, set_seed
 
 
-# Import to trigger registration (side effect)
-from . import models_baselines  # noqa: F401
-from . import models_classical  # noqa: F401
-from . import models_neural     # noqa: F401
-from . import models_sota       # noqa: F401
+# Import to trigger registration (side effect).
+# Order matters: ensembles depend on base-learners, so classical/zero_inflated first.
+from . import models_baselines      # noqa: F401
+from . import models_classical      # noqa: F401
+from . import models_zero_inflated  # noqa: F401
+from . import models_ensemble       # noqa: F401
+from . import models_neural         # noqa: F401
+from . import models_sota           # noqa: F401
 
 
 VAL_PRED_DIR = config.RESULTS_DIR / "val_preds"
