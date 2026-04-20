@@ -161,6 +161,72 @@ def lightgbm_lag(out_fit, weather_fit, timestamps_fit, locations, horizon, seed)
 
 
 @register(
+    "per_county_lgb",
+    tier="classical",
+    stochastic=True,
+    description="Per-county LightGBM (83 independent models) — exploits county heterogeneity.",
+)
+def per_county_lgb(out_fit, weather_fit, timestamps_fit, locations, horizon, seed):
+    """Train one LightGBM per county instead of a global model.
+
+    Rationale: Wayne (urban storm-prone, tracked=922k) and Alcona (rural, tracked~5k)
+    have very different outage dynamics. A shared model must compromise. Per-county
+    models can specialize — at the cost of less training data per model (~20k rows).
+    """
+    try:
+        import lightgbm as lgb
+    except ImportError as e:
+        raise RuntimeError("lightgbm not installed") from e
+
+    from .data import build_lag_table
+    X_tr, y_tr, X_inf, loc_ids_tr, feature_names = build_lag_table(
+        out=out_fit, weather=weather_fit, timestamps=timestamps_fit,
+        horizon=horizon, origin_stride=_TABULAR_ORIGIN_STRIDE,
+    )
+    # location_idx column is the last one in X
+    loc_col = feature_names.index("location_idx")
+    L = out_fit.shape[1]
+
+    pred_flat = np.zeros(X_inf.shape[0], dtype=np.float32)
+    n_counties_trained = 0
+    for li in range(L):
+        tr_mask = loc_ids_tr == li
+        if tr_mask.sum() < 50:
+            continue
+        X_c = X_tr[tr_mask]
+        y_c = y_tr[tr_mask]
+        y_c_log = np.log1p(np.clip(y_c, 0, None))
+
+        model = lgb.LGBMRegressor(
+            n_estimators=400,
+            num_leaves=31,
+            learning_rate=0.05,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            random_state=seed,
+            verbosity=-1,
+        )
+        model.fit(X_c, y_c_log)
+        n_counties_trained += 1
+
+        inf_mask = X_inf[:, loc_col].astype(int) == li
+        if inf_mask.any():
+            pred_log = model.predict(X_inf[inf_mask])
+            max_log = float(np.log1p(y_c.max())) + 2.0
+            pred_flat[inf_mask] = np.expm1(np.clip(pred_log, None, max_log))
+
+    max_y = float(y_tr.max()) * 1.5 + 10.0
+    pred_flat = np.clip(pred_flat, 0.0, max_y)
+    preds = pred_flat.reshape(horizon, L).astype(np.float32)
+    return preds, {
+        "n_counties_trained": n_counties_trained,
+        "n_estimators_per_county": 400,
+        "log_target": True,
+        "origin_stride": _TABULAR_ORIGIN_STRIDE,
+    }
+
+
+@register(
     "lightgbm_tweedie",
     tier="classical",
     stochastic=True,

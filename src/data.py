@@ -202,23 +202,37 @@ def build_lag_table(
     horizon: int,
     lags: list[int] = config.LAG_FEATURES,
     rolls: list[int] = config.ROLLING_WINDOWS,
+    weather_lags: tuple[int, ...] = (3, 12, 24),    # NEW: lags for weather features (storm build-up)
+    extra_storm_features: bool = True,              # NEW: rolling max / nonzero count / day-over-day delta
     origin_stride: int = 1,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[str]]:
     """Build train (X, y) and inference X_inf for tree/linear models.
+
+    Feature groups produced (all leak-free: use only data up to time t):
+      * Outage lags            — `lags` offsets of outage history
+      * Outage rolling stats   — mean/std over `rolls` windows
+      * Outage storm indicators (if `extra_storm_features`):
+          · rolling max over 24h (peak of recent storm)
+          · count of nonzero-outage hours over 24h (storm duration)
+          · day-over-day delta  out[t] − out[t-24] (momentum signal)
+      * Weather at t
+      * Weather lags (if `weather_lags` not empty) — 3/12/24h ago by default
+      * Calendar at target time t+h
+      * Horizon step h
+      * Location index
 
     Returns
     -------
     X_tr : (N, P) float32
     y_tr : (N,)   float32
-    X_inf : (L * horizon, P) float32 — features for predicting the next `horizon`
-            hours starting at timestamps[-1] + 1h, row-order
-            (h=1, l=0), (h=1, l=1), ..., (h=1, l=L-1), (h=2, l=0), ...
-    loc_ids_tr : (N,) int64 — location index for each training row (for debugging)
+    X_inf : (L * horizon, P) float32
+    loc_ids_tr : (N,) int64
     feature_names : list[str]
     """
     T, L = out.shape
     F = weather.shape[-1]
-    max_lag = max([max(lags), max(rolls) if rolls else 0])
+    max_lag = max([max(lags), max(rolls) if rolls else 0,
+                   max(weather_lags) if weather_lags else 0, 24])
 
     # ---- Outage lag features: shape (T, L, len(lags)) ----
     lag_arr = np.full((T, L, len(lags)), np.nan, dtype=np.float32)
@@ -233,11 +247,42 @@ def build_lag_table(
         roll_arr[:, :, 2 * j] = df_out.rolling(w, min_periods=1).mean().values.astype(np.float32)
         roll_arr[:, :, 2 * j + 1] = df_out.rolling(w, min_periods=1).std().fillna(0.0).values.astype(np.float32)
 
-    # ---- Weather at t: shape (T, L, F) — no lags (kept compact) ----
+    # ---- Storm indicator features (over past 24h) ----
+    storm_feats = []
+    storm_names = []
+    if extra_storm_features:
+        # Rolling max over past 24h (peak of recent storm)
+        roll24_max = df_out.rolling(24, min_periods=1).max().values.astype(np.float32)
+        # Count of hours with outage > 0 over past 24h (storm duration)
+        roll24_nonzero = (df_out > 0).rolling(24, min_periods=1).sum().values.astype(np.float32)
+        # Day-over-day delta: out[t] - out[t-24]
+        dod_delta = np.full_like(out, np.nan, dtype=np.float32)
+        if 24 < T:
+            dod_delta[24:] = out[24:] - out[:-24]
+        storm_feats = [roll24_max, roll24_nonzero, dod_delta]
+        storm_names = ["storm_peak_24h", "storm_nonzero_count_24h", "outage_delta_vs_24h_ago"]
+
+    # ---- Weather at t: shape (T, L, F) ----
     weather_at_t = weather  # alias
 
+    # ---- Weather lags: (T, L, F * len(weather_lags)) ----
+    weather_lag_arrays = []
+    weather_lag_names = []
+    for lag in weather_lags:
+        arr = np.full_like(weather, np.nan, dtype=np.float32)
+        if lag < T:
+            arr[lag:] = weather[:-lag]
+        weather_lag_arrays.append(arr)
+        weather_lag_names += [f"w{i}_lag{lag}" for i in range(F)]
+
     # ---- Stack per-step features (excluding calendar-at-target and h_step) ----
-    feat_at_t = np.concatenate([lag_arr, roll_arr, weather_at_t], axis=-1)  # (T, L, P_base)
+    feat_list = [lag_arr, roll_arr]
+    if extra_storm_features:
+        # storm features are (T, L) each — need (T, L, 1) to stack
+        feat_list += [sf[:, :, None] for sf in storm_feats]
+    feat_list += [weather_at_t] + weather_lag_arrays
+
+    feat_at_t = np.concatenate(feat_list, axis=-1)  # (T, L, P_base)
     P_base = feat_at_t.shape[-1]
 
     # ---- Calendar features for all timestamps ----
@@ -255,7 +300,9 @@ def build_lag_table(
     feature_names = (
         [f"lag_{k}" for k in lags]
         + [f"{s}_{w}" for w in rolls for s in ("rollmean", "rollstd")]
+        + (storm_names if extra_storm_features else [])
         + [f"w_{i}" for i in range(F)]
+        + weather_lag_names
         + ["hour_sin", "hour_cos", "dow_sin", "dow_cos", "month_sin", "month_cos"]
         + ["h_step", "location_idx"]
     )
