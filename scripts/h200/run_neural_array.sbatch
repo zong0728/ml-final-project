@@ -7,17 +7,17 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
-#SBATCH --array=0-9
+#SBATCH --array=0-11
 #SBATCH --output=scripts/h200/logs/OUT_nn_%A_%a.out
 #SBATCH --error=scripts/h200/logs/OUT_nn_%A_%a.err
 
 # Array job: each task handles ONE neural architecture across all hparams
-# and all folds. 10 archs => 10 array tasks => fully parallel on 10 GPUs.
+# and all folds. 12 archs => 12 array tasks => fully parallel on 12 GPUs.
 #
 # Submit: sbatch scripts/h200/run_neural_array.sbatch
 set -euo pipefail
 
-ARCHS=(gru lstm bilstm tcn mlp transformer nlinear dlinear patchtst itransformer)
+ARCHS=(gru lstm bilstm tcn mlp transformer nlinear dlinear patchtst itransformer nbeats nhits)
 ARCH=${ARCHS[$SLURM_ARRAY_TASK_ID]}
 
 module load python/miniforge3_pytorch/2.10.0

@@ -22,6 +22,7 @@ from src.runner import run_all
 from src.training import summarize_runs
 from src import models_neural as MN     # registers basic NN archs as side effect
 from src import models_sota as MS       # registers nlinear/dlinear/patchtst/itransformer
+from src import models_advanced as MA   # registers nbeats / nhits / auto_arima / quantile-LGB
 
 
 # ----------------------------------------------------------------------------
@@ -72,11 +73,20 @@ def _build(arch: str, input_dim: int, horizon: int, hp: dict):
         return MS.ITransformerNet(input_dim, hp["sl"], horizon,
                                     d_model=hp["hidden"], nhead=nhead,
                                     num_layers=hp["layers"], dropout=hp["drop"])
+    if arch == "nbeats":
+        return MA.NBeatsNet(input_dim, hp["sl"], horizon,
+                            n_blocks=max(2, hp["layers"] + 2),
+                            hidden=hp["hidden"], n_layers=4, dropout=hp["drop"])
+    if arch == "nhits":
+        return MA.NHiTSNet(input_dim, hp["sl"], horizon,
+                           n_blocks=max(2, hp["layers"] + 2),
+                           hidden=hp["hidden"], n_layers=2, dropout=hp["drop"])
     raise KeyError(arch)
 
 
 ARCHS = ["gru", "lstm", "bilstm", "tcn", "mlp", "transformer",
-         "nlinear", "dlinear", "patchtst", "itransformer"]
+         "nlinear", "dlinear", "patchtst", "itransformer",
+         "nbeats", "nhits"]
 
 
 def _short_name(arch: str, hp: dict) -> str:

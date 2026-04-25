@@ -37,6 +37,20 @@ from . import models_classical      # noqa: F401
 from . import models_zero_inflated  # noqa: F401
 from . import models_ensemble       # noqa: F401
 
+# models_advanced has both NN and tree models; only its tree-tier registers
+# imports lightgbm at call time, but the module-level imports include torch
+# (via NBeats/NHiTS class definitions). To stay deadlock-safe we lazy-load it
+# behind the same gate as neural models.
+_ADV_IMPORTED = False
+
+
+def _ensure_advanced_imports():
+    global _ADV_IMPORTED
+    if _ADV_IMPORTED:
+        return
+    from . import models_advanced  # noqa: F401
+    _ADV_IMPORTED = True
+
 # Neural / SOTA modules import torch at module level. On macOS, importing torch
 # BEFORE any LightGBM call can deadlock LightGBM via OpenMP conflicts. So we
 # defer those imports — they're loaded only when a neural model is actually
@@ -92,15 +106,26 @@ def run_all(
             print(f"    fold {fld['fold_id']}: val={fld['val_start_ts']} → {fld['val_end_ts']}  "
                   f"(sum={fld['val_sum']:.0f}, peak={fld['val_peak']:.0f})")
 
+    NN_BUILTINS = {"gru", "bilstm", "lstm", "mlp", "tcn", "transformer",
+                    "nlinear", "dlinear", "patchtst", "itransformer"}
+    ADV_BUILTINS = {"nbeats", "nhits", "auto_arima",
+                    "lgb_quantile_p50", "lgb_quantile_p90"}
+
     if model_names is None:
-        # User wants all models — include neural now.
         _ensure_nn_imports()
+        _ensure_advanced_imports()
         model_names = list(MODEL_REGISTRY.keys())
     else:
-        # If any neural-style model is requested by name, load those modules.
-        if any(m in ("gru", "bilstm", "lstm", "mlp", "tcn", "transformer",
-                     "nlinear", "dlinear", "patchtst", "itransformer") for m in model_names):
+        # Trigger lazy imports based on what was requested. Also handle the
+        # grid-search prefixes (e.g. gru__, nbeats__) used by run_neural_grid.
+        wants_nn = any(m in NN_BUILTINS or m.split("__", 1)[0] in NN_BUILTINS
+                        for m in model_names)
+        wants_adv = any(m in ADV_BUILTINS or m.split("__", 1)[0] in ADV_BUILTINS
+                         for m in model_names)
+        if wants_nn:
             _ensure_nn_imports()
+        if wants_adv:
+            _ensure_advanced_imports()
 
     # Build flat schedule: (model, seed, horizon, fold_id)
     schedule: list[tuple[str, int, int, int]] = []
