@@ -217,8 +217,12 @@ than all-zero (160.9). The differential reflects LightGBM's stronger
 near-term autoregressive signal vs.\ SARIMAX's better-behaved long-horizon
 mean-reversion.
 
-% Table placeholders — populated from report_assets/cv_summary.csv after the
-% trees + grid search complete.
+% Headline table: best model vs the project-specified baselines (zero, SARIMAX)
+% across four aggregation strategies — primary evidence of improvement.
+\input{headline_h24.tex}
+\input{headline_h48.tex}
+
+% Detailed top-N tables.
 \input{cv_table_h24.tex}
 \input{cv_table_h48.tex}
 
