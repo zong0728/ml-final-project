@@ -1,16 +1,21 @@
-We use the equal-weight ensemble's 48-hour test forecast to drive a greedy allocation of the 5 backup generators. Given each generator's \textbf{1{,}000-household cap}, the marginal benefit of placing one in county $c$ at decision step $s$ is the integral of the predicted outage in $c$ over the 48-hour horizon, capped both at 1{,}000 (per generator) and at the county's tracked household maximum:
+We use the equal-weight ensemble's 48-hour test forecast to drive a greedy allocation of the 5 backup generators. The marginal benefit of placing one generator in county $c$ at decision step $s$ is the integral, across the 48-hour horizon, of the un-served outage that one generator (capacity 1{,}000 households) can absorb:
 
 \[
 M_s(c) = \sum_{h=1}^{48} \min\!\bigl( \hat y_{c,t+h} - {\rm consumed}_{s-1}(c,h),\ 1000,\ {\rm tracked\_max}(c) \bigr).
 \]
+The per-hour cap at 1{,}000 is what gives the algorithm its \emph{diminishing returns}: once a generator is placed in county $c$, subsequent generators contribute strictly less because the previously consumed capacity is subtracted. This makes $M_s$ a monotone submodular function over identical action sets, so the greedy algorithm is optimal (not merely a $1{-}1/e$ approximation).
 
-We greedily pick the county maximizing $M_s$, deduct the served capacity, and repeat for $s{=}1,\dots,5$. Multiple generators \emph{may} go to the same county if its 48h served-household-hours still exceed 1{,}000 after the previous draw. Our recommendation is:
+A secondary cap at $\text{tracked\_max}(c)$ is included as a defensive guard for two future scenarios: (i) deployment to jurisdictions smaller than 1{,}000 households, and (ii) prediction pathologies where $\hat y_c$ exceeds the county's actual household count. Neither binds in Michigan: the smallest county (Baraga, FIPS 26013) tracks 2{,}327 households, and our predictions are clipped to $1.5\times$ the historical max in any case. We retain the cap for code generality.
+
+We greedily pick $c^\star_s = \arg\max_c M_s(c)$, deduct the served capacity from $\text{remaining}$, and repeat for $s{=}1,\dots,5$. Multiple generators \emph{may} go to the same county if its remaining served-household-hours after deduction still exceed every other county's marginal --- a feature, not a bug, since stacking generators in a high-impact county is allowed by the project description and is the optimal action when the predicted outage is many times larger than 1{,}000.
+
+Our recommendation is:
 
 \begin{quote}
 \verb|[ pending — run scripts.finalize ]|
 \end{quote}
 
-\paragraph{Rationale.}
+\paragraph{Rationale (per-step marginal benefit).}
 [ rationale table pending ]
 
 \paragraph{Limitations.}
