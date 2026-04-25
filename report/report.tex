@@ -1,0 +1,254 @@
+\documentclass[10pt]{article}
+\usepackage[margin=0.85in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+\usepackage{enumitem}
+\setlist{itemsep=2pt, topsep=2pt}
+
+\title{\vspace{-1.2cm}Power Outage Forecasting and Backup Generator Pre-positioning\\
+       \large 95-828 Machine Learning for Problem Solving --- Spring 2026}
+\author{}
+\date{\vspace{-0.6cm}}
+
+\begin{document}
+\maketitle
+\vspace{-1.0cm}
+
+\section{Introduction}
+Extreme-weather-driven power outages are a recurring societal cost in the
+US Midwest. We are given hourly outage counts and 109 atmospheric/hydrological
+features for the 83 Michigan counties over a 90-day window
+(\textbf{2023-04-01 to 2023-06-30}), and asked to (i) forecast outages over
+the next 24 and 48 hours and (ii) recommend the placement of five 1{,}000-household
+backup generators. Two design constraints shape the entire pipeline:
+\begin{itemize}
+\item \textbf{No future weather is available at test time.} Only outage history
+plus weather observed up to and including the forecast origin can be used.
+\item \textbf{The training window ends mid-storm.} The largest event of the
+year (peak 86{,}313 outages on 2023-06-29) starts on 2023-06-23 and runs
+through the end of training. The test horizon begins one hour after the
+final training observation, so any model has to extrapolate \emph{into} a
+storm without ground-truth weather.
+\end{itemize}
+These constraints directly motivate our validation design (\S\ref{sec:cv})
+and feature engineering (\S\ref{sec:features}).
+
+\section{Data Analysis}
+\label{sec:eda}
+The data is a single \texttt{.nc} file with shape $T{=}2{,}161 \times L{=}83 \times F{=}109$
+plus an outage matrix $\mathbf{Y}\in\mathbb{R}_{\ge 0}^{T\times L}$ and a per-county
+\texttt{tracked} household count.
+
+\paragraph{Sparse, heavy-tailed outage counts.}
+70.5\% of $(c,t)$ cells have zero outages, and the non-zero distribution is
+heavy-tailed (Fig.~\ref{fig:dist}). Across the full window, the state-wide hourly
+outage total ranges from 105 to 86{,}313, with the 99.5th percentile already
+ten times the median --- a \textbf{zero-inflated, log-normal-tailed regression
+target}.
+
+\paragraph{Storm-event structure.}
+Using a state-wide threshold of 2{,}000 simultaneous outages with a 6-hour minimum
+duration (12-hour merge gap), we detect \textbf{26 distinct storm events}
+in the 90-day window (Fig.~\ref{fig:state}). The largest event (id 25,
+2023-06-23 -- 2023-06-30) has a peak of 86{,}313, more than 3$\times$ the
+second-largest (id 0, 27{,}643). The training window ends inside this event.
+
+\paragraph{Strong autocorrelation.}
+The state-wide outage series is highly autocorrelated, with a clear
+diurnal echo at lag 24h and a weaker weekly echo at lag 168h
+(Fig.~\ref{fig:acf}). This implies that lagged outage counts should
+dominate any feature set; weather is informative but secondary because
+its predictive value is partly already encoded in past outages.
+
+\paragraph{County heterogeneity.}
+Per-county \texttt{tracked} (the maximum number of households tracked) ranges
+from $\sim$5{,}000 to over 920{,}000. Wayne County (FIPS 26163, Detroit)
+peaks at 922{,}425 households tracked but its peak hourly outage of 15{,}143
+is only the third largest, while Genesee (26049) and Macomb (26099) take
+disproportionate hits per household (Fig.~\ref{fig:het}). This heterogeneity
+later drives our policy recommendation (\S\ref{sec:policy}).
+
+\paragraph{Top weather correlates.}
+The 15 weather features most correlated with state-wide outage are
+all moisture-and-wind-related (\texttt{cape}, low-level $u/v$ winds,
+precipitable water, \texttt{vstm} storm-motion magnitude). We retain all
+non-zero-variance features (91 after filtering); tree models implicitly
+select among them.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{../results/figures/statewide_outage.png}
+\caption{State-wide hourly outage total over the 90-day training window
+on a symmetric-log scale. Orange shading marks the 26 detected storm events;
+the red dashed line is the 2{,}000-outage detection threshold. Note the
+disproportionately large terminal event ending exactly at the train/test
+boundary.}
+\label{fig:state}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\begin{subfigure}[b]{0.49\linewidth}
+\includegraphics[width=\linewidth]{../results/figures/outage_distribution.png}
+\caption{All-cell vs.\ non-zero cell distributions.}
+\label{fig:dist}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\linewidth}
+\includegraphics[width=\linewidth]{../results/figures/outage_autocorr.png}
+\caption{State-wide autocorrelation (7 days).}
+\label{fig:acf}
+\end{subfigure}
+\caption{Outage values are zero-inflated and heavy-tailed (left); the
+state-wide series exhibits strong diurnal autocorrelation (right).}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\begin{subfigure}[b]{0.55\linewidth}
+\includegraphics[width=\linewidth]{../results/figures/county_heterogeneity.png}
+\caption{County heterogeneity. Color = idle-rate.}
+\label{fig:het}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.42\linewidth}
+\includegraphics[width=\linewidth]{../results/figures/weather_corr_top.png}
+\caption{Top 15 weather features by $|$Pearson$|$.}
+\label{fig:weather_corr}
+\end{subfigure}
+\caption{Per-county heterogeneity and most-correlated weather features.}
+\end{figure}
+
+\section{Methods}
+\label{sec:methods}
+
+\subsection{Validation: Rolling-Origin CV that Mirrors the Test Setup}
+\label{sec:cv}
+A naive last-48h holdout falls inside the largest storm of the year, so any
+single-window val-RMSE is a sample of one and dominated by storm-period error.
+We replace it with a \textbf{rolling-origin cross-validation} scheme
+(Fig.~\ref{fig:cv_diag}) consisting of 6 folds spaced 72 hours apart.
+\begin{itemize}
+\item Each fold's validation window equals the forecast horizon (24 or 48 hours)
+\emph{immediately following} its fit window --- exactly the production setup.
+\item No weather observations from inside any val window are visible to its model.
+\item Folds span 2023-06-13 through 2023-06-29; one of them (fold 1) lands in the
+big-storm peak. Reporting mean$\pm$std across folds prevents a single high-leverage
+fold from determining the model ranking.
+\end{itemize}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{../results/figures/cv_diagram.png}
+\caption{Rolling-origin CV layout. Blue = fit set (expanding-window),
+red = held-out validation, orange = the actual test window held by the graders.
+Each fold's val window matches the production constraint exactly.}
+\label{fig:cv_diag}
+\end{figure}
+
+\subsection{Feature Engineering}
+\label{sec:features}
+For tree-based and linear models we materialize a $(N\times P)$ feature
+matrix in which each row is one (origin time, county, horizon-step) triplet.
+Features (all leak-free, using only data up to time $t$):
+\begin{itemize}[leftmargin=12pt]
+\item \textbf{Outage lags} --- $y_{c,t-k}$ for $k\in\{1,2,3,6,12,24,48,168\}$.
+\item \textbf{Outage rolling stats} --- mean and std over $\{6,24,168\}$-hour windows.
+\item \textbf{Storm indicators} --- rolling 24h max (peak intensity), 24h
+ non-zero count (storm duration), $y_{c,t}-y_{c,t-24}$ (day-over-day delta).
+\item \textbf{Weather at $t$ and lags $\{3,12,24\}$h} --- captures pre-storm build-up.
+\item \textbf{Calendar at target time $t+h$} --- $\sin/\cos$ of hour-of-day,
+ day-of-week, month-of-year ($6$ features).
+\item \textbf{Horizon step $h$} --- so a single global model can output all 48 steps.
+\item \textbf{Location index} --- ordinal for LightGBM/XGBoost, native categorical
+ for CatBoost.
+\end{itemize}
+
+\subsection{Model Families}
+We benchmark a deliberately broad set of models so that the report can defend
+each modeling choice with a baseline.
+\begin{itemize}[leftmargin=12pt]
+\item \textbf{Naive baselines (deterministic)}: all-zero, persistence
+($\hat y_{t+h} = y_t$), seasonal-naive-24h, seasonal-naive-168h, and a
+per-(county,hour-of-day,day-of-week) historical mean.
+\item \textbf{Classical TS}: per-county SARIMAX(1,0,1), the second
+mandatory baseline named in the project description.
+\item \textbf{Tabular gradient-boosted trees}: LightGBM (log-target), LightGBM with
+Tweedie loss (compound Poisson--Gamma, designed for zero-inflated positive
+data), XGBoost, CatBoost (native categorical FIPS handling).
+\item \textbf{Hurdle/zero-inflated decomposition}: a binary classifier predicts
+$\Pr[y>0]$; a regressor trained on positive rows only predicts the magnitude;
+the combined estimator is $\hat y = \Pr[y>0]\cdot\hat y_{>0}$.
+\item \textbf{Per-county LightGBM}: 83 independent gradient-boosted trees,
+one per county, exploiting heterogeneity.
+\item \textbf{Sequence models}: GRU, BiLSTM, DLinear, PatchTST (run on H200).
+\item \textbf{Equal-weight ensemble}: arithmetic mean of the top-$k$ CV models.
+We deliberately avoid \emph{learned} stacking weights because all weight
+training would happen on the same val folds and would over-fit the
+big-storm fold.
+\end{itemize}
+
+\section{Results}
+\label{sec:results}
+
+\paragraph{Rolling-origin CV summary.}
+Table~\ref{tab:cv24} reports CV RMSE for the 24h horizon; Table~\ref{tab:cv48}
+the 48h. Both tables show the mean$\pm$std across 6 folds (one seed per
+stochastic model in this iteration). Two patterns are immediately visible:
+
+\textbf{(1) The mean is dominated by fold 1 (the storm peak.)}
+For every model the per-fold maximum RMSE (achieved on fold 1) is one to two
+orders of magnitude larger than the minimum (fold 4, a quiet 48h window).
+The fold-level heatmap (Fig.~\ref{fig:heatmap}) makes this concrete.
+This is exactly the symptom we expected from an OOD-storm test setup, and
+it explains why simple baselines like \emph{persistence} score very
+competitively on mean-RMSE.
+
+\textbf{(2) LightGBM beats SARIMAX on 24h and ties on 48h.}
+At 24h, LightGBM averages \textbf{172.8} RMSE vs.\ SARIMAX's \textbf{179.9}
+and the all-zero baseline's \textbf{189.5}.
+At 48h, LightGBM (158.8) and SARIMAX (157.9) are within noise, both better
+than all-zero (160.9). The differential reflects LightGBM's stronger
+near-term autoregressive signal vs.\ SARIMAX's better-behaved long-horizon
+mean-reversion.
+
+% Table placeholders — populated from report_assets/cv_summary.csv after the
+% trees + grid search complete.
+\input{cv_table_h24.tex}
+\input{cv_table_h48.tex}
+
+\begin{figure}[t]
+\centering
+\begin{subfigure}[b]{0.49\linewidth}
+\includegraphics[width=\linewidth]{../results/figures/cv_heatmap_h24.png}
+\caption{24h: per-fold RMSE per model.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\linewidth}
+\includegraphics[width=\linewidth]{../results/figures/cv_heatmap_h48.png}
+\caption{48h: per-fold RMSE per model.}
+\end{subfigure}
+\caption{Fold-level RMSE. Fold 1 (the big-storm window) drives mean RMSE
+across all models, validating the rolling-CV design.}
+\label{fig:heatmap}
+\end{figure}
+
+\section{Analysis and Policy Recommendation}
+\label{sec:policy}
+% Filled in by scripts/finalize.py output.
+\input{policy_section.tex}
+
+\section{References}
+\small
+[1] G.~Ke et al.\ \emph{LightGBM: A Highly Efficient Gradient Boosting Decision Tree.} NeurIPS 2017. \\
+\!\!\!\![2] L.~Prokhorenkova et al.\ \emph{CatBoost: unbiased boosting with categorical features.} NeurIPS 2018. \\
+\!\!\!\![3] R.~J.~Hyndman, G.~Athanasopoulos. \emph{Forecasting: Principles and Practice}, 3rd ed.\\
+\!\!\!\![4] B.~Jorgensen. \emph{Exponential Dispersion Models.} JRSS-B, 1987 (Tweedie family).\\
+\!\!\!\![5] A.~Zeng et al.\ \emph{Are Transformers Effective for Time Series Forecasting?} AAAI 2023 (DLinear).
+
+\end{document}

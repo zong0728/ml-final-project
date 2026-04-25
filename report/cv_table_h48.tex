@@ -1,0 +1,21 @@
+\begin{table}[t]
+\centering
+\caption{48-hour rolling-origin CV: per-model RMSE (mean $\pm$ std across 6 folds, one seed). Lower is better. Fold count $n$ may be < 6 if a configuration was still in progress at writing time.}
+\label{tab:cv48}
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Model & mean & std & min & max & $n$ \\
+\midrule
+  SARIMAX(1,0,1) per county & 157.9 & 274.2 & 33.9 & 717.1 & 6 \\
+  LightGBM (log target) & 158.8 & 274.6 & 33.2 & 718.6 & 6 \\
+  All-zero & 160.9 & 275.6 & 34.0 & 723.0 & 6 \\
+  Linear regression on lag features & 161.0 & 275.4 & 34.1 & 722.6 & 6 \\
+  Persistence ($y_t$ repeated) & 178.7 & 286.1 & 33.5 & 759.8 & 6 \\
+  Hist.\ mean (county$\times$hour$\times$dow) & 179.5 & 261.7 & 64.2 & 713.3 & 6 \\
+  Seasonal naive (168h) & 183.2 & 263.2 & 51.5 & 719.8 & 6 \\
+  Seasonal naive (24h) & 217.9 & 270.3 & 35.9 & 737.6 & 6 \\
+  Ridge ($\alpha{=}1$) & 1712.5 & 0.0 & 1712.5 & 1712.5 & 1 \\
+\bottomrule
+\end{tabular}
+\end{table}
