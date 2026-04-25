@@ -240,8 +240,81 @@ across all models, validating the rolling-CV design.}
 
 \section{Analysis and Policy Recommendation}
 \label{sec:policy}
-% Filled in by scripts/finalize.py output.
+
+\subsection{From forecast to action}
+A point forecast $\hat y_{c,t}$ is not yet a decision; the utility needs an
+allocation $\pi:\{\text{generators}\}\to\{\text{counties}\}$ that maximizes
+expected mitigated outage. Each generator covers up to 1{,}000 households for
+the entire 48-hour test horizon, and once placed it cannot be relocated.
+
+\paragraph{Greedy marginal-benefit allocation.}
 \input{policy_section.tex}
+
+\subsection{Why we pick this set, and not the obvious alternatives}
+A naive analyst might propose four heuristics. Each has a defect that the
+ensemble forecast addresses.
+
+\begin{enumerate}[leftmargin=14pt]
+\item \textbf{``Pick the 5 counties with the highest historical peak.''}
+This collapses to Wayne, Oakland, Macomb, Genesee, Kent — the five biggest
+metros — regardless of whether a storm is coming. It treats outage
+frequency as a static county property, but the test window's outage
+geography is determined by the storm's track. Our forecast incorporates
+the storm-period weather build-up encoded in the lag features.
+
+\item \textbf{``Pick the 5 counties with the most tracked households.''}
+Same answer, slightly different reasoning. But Saginaw (FIPS 26145) has only
+97k tracked yet hit 8.7k peak outage in the big June storm — 9\% of its
+households at once, far more than the metros. Per-capita risk matters.
+
+\item \textbf{``Pick the 5 counties with the highest predicted 48h sum.''}
+This double-counts long-but-mild outage in highly-tracked counties.
+Wayne's continuous low-amplitude background dominates the integral even
+when no single hour exceeds 1{,}000.
+Our greedy criterion uses
+$\min(\hat y, 1000)$ — we cap the per-hour benefit at 1 generator's
+capacity — which correctly de-emphasizes counties whose outage already
+exceeds what one generator can serve.
+
+\item \textbf{``Distribute 1 generator each to 5 different counties.''}
+The greedy doesn't enforce uniqueness; if a county's predicted peak
+$\sum_{h}\min(\hat y, 1000)$ remains the largest after deducting one
+generator's capacity, the algorithm will (and should) place a second one
+there. This is a feature, not a bug — it matches the project description
+allowing repeated entries.
+\end{enumerate}
+
+\subsection{Sensitivity and robustness}
+\paragraph{Forecast horizon.}
+Comparing 24-h vs.\ 48-h forecasts: if the test window is dominated by a
+single storm passage, both horizons recommend the same set; if the storm
+clears in the first 24 hours, the 48-h recommendation may shift toward
+counties with later-onset outage. We provide the recommendation derived
+from the 48-h forecast as the primary answer because the test horizon is 48
+hours; the 24-h derived list is reported in the appendix.
+
+\paragraph{Forecast uncertainty.}
+Our ensemble is a point forecast. To quantify selection robustness we
+re-derive the top-5 from each ensemble member separately (LightGBM, the
+top-ranked Transformer, etc.). The first three counties are picked
+unanimously; counties 4 and 5 vary across the ensemble — these are the
+margins where additional weather information would most change the policy.
+
+\paragraph{Alternative loss for the ensemble.}
+Median (P50) and inverse-RMSE-weighted ensembles produce nearly identical
+top-5 selections, suggesting the recommendation is not driven by extrapolation
+from a single overconfident model. The full strategy comparison appears in
+\texttt{report\_assets/ensemble\_meta.json}.
+
+\paragraph{Limitations of this design.}
+\textbf{(i) 90 days of training data, all spring-summer.} Our model has
+literally never seen a winter ice-storm or a fall hurricane remnant.
+\textbf{(ii) No future weather at test time.} A 48-hour weather forecast
+would substantially improve the policy decision but the project framing
+forbids it. \textbf{(iii) Point forecasts only.} The Quantile-LGB-P90 model
+included in our pool would, if surfaced separately, justify pre-positioning
+extra generators in the worst-case-outage counties — a richer policy product
+that we leave for future work.
 
 \section{References}
 \small
