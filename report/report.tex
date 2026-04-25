@@ -222,10 +222,11 @@ On the storm fold all families collapse to RMSE~700--900, the ranking
 effectively randomised --- confirming that storm-event extrapolation is
 bounded by data, not architecture.
 
-Figure~\ref{fig:per_fold} shows each top-15 model's RMSE on every fold.
-Model differences within the GBDT cluster are at most $\pm 0.5$ RMSE on
-calm folds, indicating saturation; fold~0 (the rolling-CV window closest
-to the test setup) is the hardest calm fold (RMSE~71 vs.\ 19--44 elsewhere).
+Figure~\ref{fig:family_fold} disaggregates this further by showing each
+family's best configuration on every fold. The GBDT cluster (top 13 rows)
+is visibly homogeneous; the sequence-NN families consistently lose 10--30
+RMSE on calm folds; fold~0 (test-adjacent) is the hardest calm fold across
+all families (RMSE 70--90 vs.\ 19--44 elsewhere).
 
 \begin{figure}[ht]
 \centering
@@ -241,11 +242,19 @@ cluster at 41.5; NNs at 53--110. Right: storm-fold RMSE (all collapse to
 
 \begin{figure}[ht]
 \centering
-\includegraphics[width=0.85\linewidth]{../results/figures/cv_per_fold_h24.png}
-\caption{Per-fold RMSE, top-15 models on 24h. Calm folds (left, 15--90)
-and storm fold (right, 600--950) on separate scales. Fold~0 (test-adjacent)
-is the hardest calm fold; storm-fold ranking is essentially random.}
-\label{fig:per_fold}
+\includegraphics[width=0.85\linewidth]{../results/figures/cv_family_fold_h24.png}
+\caption{Per-family $\times$ per-fold RMSE on the 24h horizon (best
+configuration of each family). Three patterns visible: (i) the 13 GBDT-family
+rows at the top are visibly homogeneous on calm folds (RMSE 39--47),
+indicating saturation; (ii) sequence-NN families below them (Transformer,
+GRU, BiLSTM, TCN, N-BEATS) lose 10--30 RMSE units on calm folds despite
+extensive hyper-parameter sweeps; (iii) every family lands in the
+700--950 RMSE band on storm fold 1 (right column, separate scale),
+confirming that storm-event extrapolation is bounded by data, not architecture.
+\texttt{persistence}'s anomalously low storm-RMSE (660) is the
+one exception — copying the last hour's value happens to align with
+storm-continuation, but it loses elsewhere.}
+\label{fig:family_fold}
 \end{figure}
 
 \subsection{What Did Not Improve the Result}
