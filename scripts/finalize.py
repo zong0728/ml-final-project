@@ -46,6 +46,11 @@ register_xgb_grid()
 register_cat_grid()
 register_lgb_tweedie_grid()
 
+# Always register advanced models (auto_arima, lgb_quantile_*, hurdle, etc.)
+# These don't pull in torch unless they actually use a NN, so safe to import here.
+from src import models_advanced  # noqa: F401  E402
+from src import models_v2        # noqa: F401  E402  (v2 feature-set tree models)
+
 
 def _ensure_advanced_registered():
     """Lazy register N-BEATS / N-HiTS / AutoARIMA / Quantile-LGB and the
@@ -64,7 +69,8 @@ TEST_PRED_DIR.mkdir(exist_ok=True)
 
 
 def pick_topk(horizon: int, k: int,
-              exclude_prefixes: tuple[str, ...] = ("zero", "seasonal_naive",
+              exclude_prefixes: tuple[str, ...] = ("zero", "persistence",
+                                                    "seasonal_naive",
                                                     "historical_mean", "linreg",
                                                     "ridge"),
               stability_weight: float = 0.0,
@@ -88,9 +94,14 @@ def pick_topk(horizon: int, k: int,
     sub = sub[sub["n"] >= 4]
     if sub.empty:
         raise RuntimeError(f"No eligible models for horizon={horizon}")
-    # Primary score: MEDIAN RMSE (robust to the storm-fold outlier).
-    # Stability term still uses std around the mean to penalize unstable models.
-    sub["score"] = sub["val_rmse_median"] + stability_weight * sub["val_rmse_std"]
+    # Primary score: calm-period mean RMSE (5 non-storm folds), which is the
+    # most defensible "typical-day quality" metric. Stability term penalizes
+    # high std using only the calm folds — std is computed across all folds
+    # in summary, but its primary use here is to break near-ties.
+    # We use a small stability weight (0.05) on the storm column so that
+    # ties get broken in favor of the model that does relatively better on
+    # the storm fold too.
+    sub["score"] = sub["calm_mean"] + 0.05 * sub["storm_rmse"]
     sub = sub.sort_values("score")
 
     if not prefer_diversity:
