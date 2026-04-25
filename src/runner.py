@@ -37,6 +37,7 @@ from . import models_classical      # noqa: F401
 from . import models_zero_inflated  # noqa: F401
 from . import models_ensemble       # noqa: F401
 from . import models_v2             # noqa: F401  (v2 feature-set tree models)
+from . import models_recursive      # noqa: F401  (recursive 1-step prediction)
 
 # models_advanced has both NN and tree models; only its tree-tier registers
 # imports lightgbm at call time, but the module-level imports include torch
