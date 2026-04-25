@@ -228,6 +228,106 @@ def per_county_lgb(out_fit, weather_fit, timestamps_fit, locations, horizon, see
 
 
 @register(
+    "per_county_xgb",
+    tier="classical",
+    stochastic=True,
+    description="Per-county XGBoost — 83 specialized regressors.",
+)
+def per_county_xgb(out_fit, weather_fit, timestamps_fit, locations, horizon, seed):
+    """Same idea as per_county_lgb but with XGBoost (different inductive bias).
+
+    Useful as an ensemble diversity contribution because per-county XGB and
+    LGB make uncorrelated errors on different counties.
+    """
+    try:
+        import xgboost as xgb
+    except ImportError as e:
+        raise RuntimeError("xgboost not installed") from e
+
+    from .data import build_lag_table
+    X_tr, y_tr, X_inf, loc_ids_tr, feature_names = build_lag_table(
+        out=out_fit, weather=weather_fit, timestamps=timestamps_fit,
+        horizon=horizon, origin_stride=_TABULAR_ORIGIN_STRIDE,
+    )
+    loc_col = feature_names.index("location_idx")
+    L = out_fit.shape[1]
+    pred_flat = np.zeros(X_inf.shape[0], dtype=np.float32)
+    n_counties_trained = 0
+    for li in range(L):
+        tr_mask = loc_ids_tr == li
+        if tr_mask.sum() < 50:
+            continue
+        X_c = X_tr[tr_mask]; y_c = y_tr[tr_mask]
+        y_c_log = np.log1p(np.clip(y_c, 0, None))
+        model = xgb.XGBRegressor(
+            n_estimators=300, max_depth=5, learning_rate=0.05,
+            subsample=0.8, colsample_bytree=0.8,
+            random_state=seed, tree_method="hist", verbosity=0,
+        )
+        model.fit(X_c, y_c_log)
+        n_counties_trained += 1
+        inf_mask = X_inf[:, loc_col].astype(int) == li
+        if inf_mask.any():
+            pred_log = model.predict(X_inf[inf_mask])
+            max_log = float(np.log1p(y_c.max())) + 2.0
+            pred_flat[inf_mask] = np.expm1(np.clip(pred_log, None, max_log))
+    max_y = float(y_tr.max()) * 1.5 + 10.0
+    pred_flat = np.clip(pred_flat, 0.0, max_y)
+    preds = pred_flat.reshape(horizon, L).astype(np.float32)
+    return preds, {"n_counties_trained": n_counties_trained,
+                   "n_estimators_per_county": 300, "max_depth": 5,
+                   "log_target": True, "origin_stride": _TABULAR_ORIGIN_STRIDE}
+
+
+@register(
+    "per_county_cat",
+    tier="classical",
+    stochastic=True,
+    description="Per-county CatBoost — 83 specialized regressors with categorical FIPS.",
+)
+def per_county_cat(out_fit, weather_fit, timestamps_fit, locations, horizon, seed):
+    try:
+        from catboost import CatBoostRegressor
+    except ImportError as e:
+        raise RuntimeError("catboost not installed") from e
+
+    from .data import build_lag_table
+    X_tr, y_tr, X_inf, loc_ids_tr, _ = build_lag_table(
+        out=out_fit, weather=weather_fit, timestamps=timestamps_fit,
+        horizon=horizon, origin_stride=_TABULAR_ORIGIN_STRIDE,
+    )
+    L = out_fit.shape[1]
+    pred_flat = np.zeros(X_inf.shape[0], dtype=np.float32)
+    n_counties_trained = 0
+    for li in range(L):
+        tr_mask = loc_ids_tr == li
+        if tr_mask.sum() < 50:
+            continue
+        X_c = X_tr[tr_mask]; y_c = y_tr[tr_mask]
+        y_c_log = np.log1p(np.clip(y_c, 0, None))
+        model = CatBoostRegressor(
+            iterations=300, depth=5, learning_rate=0.05, l2_leaf_reg=3.0,
+            subsample=0.8, bootstrap_type="Bernoulli",
+            random_seed=seed, verbose=False,
+        )
+        model.fit(X_c, y_c_log)
+        n_counties_trained += 1
+        # Inference rows for this county come in order — we filter by row position
+        # using the inference template (inf rows are h*L+li for h in 1..H)
+        inf_idx = np.arange(L * horizon).reshape(horizon, L)[:, li].ravel()
+        if len(inf_idx) > 0:
+            pred_log = model.predict(X_inf[inf_idx])
+            max_log = float(np.log1p(y_c.max())) + 2.0
+            pred_flat[inf_idx] = np.expm1(np.clip(pred_log, None, max_log))
+    max_y = float(y_tr.max()) * 1.5 + 10.0
+    pred_flat = np.clip(pred_flat, 0.0, max_y)
+    preds = pred_flat.reshape(horizon, L).astype(np.float32)
+    return preds, {"n_counties_trained": n_counties_trained,
+                   "iterations_per_county": 300, "depth": 5,
+                   "log_target": True, "origin_stride": _TABULAR_ORIGIN_STRIDE}
+
+
+@register(
     "lightgbm_tweedie",
     tier="classical",
     stochastic=True,

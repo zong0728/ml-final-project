@@ -31,7 +31,7 @@ from . import config
 from .data import build_lag_table
 from .registry import register
 
-_TABULAR_ORIGIN_STRIDE = 4
+_TABULAR_ORIGIN_STRIDE = 8   # match models_classical.py (was 4 — too slow on M4)
 
 
 def _two_stage_predict(

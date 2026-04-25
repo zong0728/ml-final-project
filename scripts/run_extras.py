@@ -10,9 +10,21 @@ from src.training import summarize_runs
 
 
 EXTRA_MODELS = [
+    # AutoARIMA: per-county SARIMA with order grid (replaces fixed (1,0,1))
     "auto_arima",
+
+    # Quantile LGB: median + P90 for uncertainty
     "lgb_quantile_p50",
     "lgb_quantile_p90",
+
+    # Hurdle / zero-inflated decomposition (Cragg 1971, Lambert 1992)
+    "two_stage_lgb",
+    "two_stage_xgb",
+
+    # Per-county specialized regressors — diversity for ensemble
+    "per_county_lgb",
+    "per_county_xgb",
+    "per_county_cat",
 ]
 
 
