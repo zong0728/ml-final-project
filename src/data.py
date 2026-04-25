@@ -50,6 +50,83 @@ def split_train_val(ds_train: xr.Dataset, val_hours: int = config.VAL_HOURS):
 
 
 # ============================================================================
+# Rolling-origin CV folds
+#
+# The test setup (per project description) is: forecast 24h or 48h immediately
+# after the last training hour, with NO future weather. Our CV must mirror that
+# exactly. So each fold is:
+#
+#     fit  = ds_train.isel(timestamp = 0 .. origin)
+#     val  = ds_train.isel(timestamp = origin .. origin + horizon)
+#
+# Picking origins:
+#   * The natural last origin == T - horizon, identical to the prior single split.
+#   * To get more validation signal we slide back N more origins, each spaced
+#     by `stride` hours. This gives N+1 folds per horizon.
+#   * An origin is REJECTED if its val window has all-zero outage everywhere
+#     (boring period that would be dominated by 0 = degenerate RMSE).
+# ============================================================================
+
+
+def make_rolling_folds(
+    ds_train: xr.Dataset,
+    horizon: int,
+    n_folds: int = 6,
+    stride_hours: int = 72,
+    require_nonzero: bool = True,
+) -> list[dict]:
+    """Build rolling-origin folds that mirror the test-time setup.
+
+    Returns a list of dicts:
+      {fold_id, origin_idx, fit_slice, val_slice, val_start_ts, val_end_ts}
+    where slices are Python slice objects suitable for ds.isel(timestamp=slice).
+
+    The most-recent fold (fold_id=0) ends at T-1 (i.e. val == last `horizon`
+    hours of train). Subsequent folds slide backward by `stride_hours`.
+    """
+    T = len(ds_train.timestamp)
+    timestamps = pd.to_datetime(ds_train.timestamp.values)
+    out = ds_train.out.transpose("timestamp", "location").values  # (T, L)
+
+    folds: list[dict] = []
+    fid = 0
+    candidate_origin = T - horizon   # newest origin first
+    while len(folds) < n_folds and candidate_origin > horizon * 4:
+        val_lo = candidate_origin
+        val_hi = candidate_origin + horizon
+        if val_hi > T:
+            candidate_origin -= stride_hours
+            continue
+        val_window = out[val_lo:val_hi]
+        if require_nonzero and val_window.sum() < 1e-6:
+            candidate_origin -= stride_hours
+            continue
+        folds.append(dict(
+            fold_id=fid,
+            origin_idx=int(val_lo),
+            fit_slice=slice(0, val_lo),
+            val_slice=slice(val_lo, val_hi),
+            val_start_ts=timestamps[val_lo],
+            val_end_ts=timestamps[val_hi - 1],
+            val_sum=float(val_window.sum()),
+            val_peak=float(val_window.sum(axis=1).max()),
+        ))
+        fid += 1
+        candidate_origin -= stride_hours
+    return folds
+
+
+def fold_arrays(ds_train: xr.Dataset, fold: dict
+                ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str], list[str], pd.DatetimeIndex]:
+    """Materialize (out_fit, weather_fit, out_val, locations, features, timestamps_fit) for a fold."""
+    ds_fit = ds_train.isel(timestamp=fold["fit_slice"])
+    ds_val = ds_train.isel(timestamp=fold["val_slice"])
+    out_fit, weather_fit, locations, features, timestamps_fit = get_arrays(ds_fit)
+    out_val, _, _, _, _ = get_arrays(ds_val)
+    return out_fit, weather_fit, out_val, locations, features, timestamps_fit
+
+
+# ============================================================================
 # Core matrices — outage (T, L) and weather (T, L, F)
 # ============================================================================
 

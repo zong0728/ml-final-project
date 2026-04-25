@@ -38,8 +38,13 @@ SUBMISSION_TEMPLATE_48H: Path = PROJECT_ROOT / "dataset" / "submission_template_
 RUNS_CSV: Path = RESULTS_DIR / "experiment_runs.csv"
 
 # ---------- Data split ----------
-VAL_HOURS: int = 48              # hold out last 48h of train as validation
+VAL_HOURS: int = 48              # legacy single-window split (kept for back-compat)
 HORIZONS: list[int] = [24, 48]   # evaluate both forecasting horizons
+
+# Rolling-origin CV: each fold mirrors test setup (val = horizon hours
+# immediately after fit). Folds slide back by FOLD_STRIDE_HOURS.
+N_FOLDS: int = 6
+FOLD_STRIDE_HOURS: int = 72
 
 # ---------- Seeds ----------
 SEEDS: list[int] = [42, 43, 44]  # stochastic models run once per seed

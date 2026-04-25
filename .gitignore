@@ -1,6 +1,9 @@
 results/
 notes/
 dataset/
+*.nc
+report_assets/figures_local/
+__pycache__
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
