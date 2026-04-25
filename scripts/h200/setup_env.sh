@@ -18,24 +18,33 @@ else
 fi
 cd "$PROJ_DIR"
 
-echo ">>> Creating conda env '$ENV_NAME' (Python 3.11)"
-# DeltaAI uses miniforge; module-load python first.
-module load python/miniforge3-pytorch || module load python/miniforge3 || true
-if ! conda env list | grep -q "^$ENV_NAME "; then
-  conda create -n "$ENV_NAME" python=3.11 -y
+echo ">>> Loading DeltaAI Python module (provides conda + torch on aarch64)"
+module load python/miniforge3_pytorch/2.10.0
+
+echo ">>> Creating conda env '$ENV_NAME' (Python 3.11) — sandboxed under \$HOME"
+# Use --prefix so we don't collide with the diffusion project's envs path.
+ENV_PATH="$HOME/.conda/envs/$ENV_NAME"
+if [[ ! -d "$ENV_PATH" ]]; then
+  conda create -p "$ENV_PATH" python=3.11 -y
 fi
 
-echo ">>> Installing deps"
-# Use pip rather than conda — faster, fewer surprises.
-source activate "$ENV_NAME"
+echo ">>> Activating $ENV_PATH and installing deps"
+source activate "$ENV_PATH"
 pip install --quiet --upgrade pip
+# Note: on aarch64 we install torch too (the module-provided torch is tied to
+# its own python; once we activate our env we lose that). Use cu12 wheel.
 pip install --quiet \
   xarray netCDF4 numpy pandas scikit-learn \
   lightgbm catboost xgboost statsmodels \
-  matplotlib seaborn tqdm pyarrow
+  matplotlib seaborn tqdm pyarrow PyYAML
 
-# torch is already available via the cluster module — don't double-install on aarch64.
-python -c "import torch; print('torch:', torch.__version__, 'cuda:', torch.cuda.is_available())"
+# Torch on aarch64 — the cluster's preinstalled torch can't be imported from
+# our env directly. We install our own. NVIDIA hosts aarch64 wheels via
+# https://download.pytorch.org/whl/cu124.
+pip install --quiet --index-url https://download.pytorch.org/whl/cu124 torch || \
+  pip install --quiet torch    # fallback: PyPI wheel (may be CPU-only on aarch64)
+
+python -c "import torch; print('torch:', torch.__version__, 'cuda(login=False expected):', torch.cuda.is_available())"
 
 echo
 echo ">>> Verifying"

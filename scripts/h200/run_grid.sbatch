@@ -20,8 +20,8 @@ set -euo pipefail
 GRID_NAME="${1:-all}"
 mkdir -p scripts/h200/logs
 
-module load python/miniforge3-pytorch || module load python/miniforge3 || true
-source activate outage
+module load python/miniforge3_pytorch/2.10.0
+source activate "$HOME/.conda/envs/outage"
 
 cd "$SLURM_SUBMIT_DIR"
 echo "[OUT_grid] host=$(hostname) gpu=$(nvidia-smi -L | head -1)"

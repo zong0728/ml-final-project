@@ -30,6 +30,13 @@ from src.evaluation import save_submission
 from src.registry import MODEL_REGISTRY
 from src.training import set_seed, summarize_runs
 
+# Trigger model registration (side effect imports). Tree-only here; neural
+# models are loaded lazily by the runner if needed.
+from src import models_baselines      # noqa: F401
+from src import models_classical      # noqa: F401
+from src import models_zero_inflated  # noqa: F401
+from src import models_ensemble       # noqa: F401
+
 
 TEST_PRED_DIR = config.RESULTS_DIR / "test_preds"
 TEST_PRED_DIR.mkdir(exist_ok=True)
