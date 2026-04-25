@@ -31,13 +31,26 @@ from .registry import MODEL_REGISTRY, ModelInfo
 from .training import already_ran_fold, log_run_fold, set_seed
 
 
-# Import to trigger registration (side effect).
+# Import to trigger registration (side effect). Tree models first.
 from . import models_baselines      # noqa: F401
 from . import models_classical      # noqa: F401
 from . import models_zero_inflated  # noqa: F401
 from . import models_ensemble       # noqa: F401
-from . import models_neural         # noqa: F401
-from . import models_sota           # noqa: F401
+
+# Neural / SOTA modules import torch at module level. On macOS, importing torch
+# BEFORE any LightGBM call can deadlock LightGBM via OpenMP conflicts. So we
+# defer those imports — they're loaded only when a neural model is actually
+# requested (see _ensure_nn_imports below).
+_NN_IMPORTED = False
+
+
+def _ensure_nn_imports():
+    global _NN_IMPORTED
+    if _NN_IMPORTED:
+        return
+    from . import models_neural      # noqa: F401
+    from . import models_sota        # noqa: F401
+    _NN_IMPORTED = True
 
 
 VAL_PRED_DIR = config.RESULTS_DIR / "val_preds"
@@ -80,7 +93,14 @@ def run_all(
                   f"(sum={fld['val_sum']:.0f}, peak={fld['val_peak']:.0f})")
 
     if model_names is None:
+        # User wants all models — include neural now.
+        _ensure_nn_imports()
         model_names = list(MODEL_REGISTRY.keys())
+    else:
+        # If any neural-style model is requested by name, load those modules.
+        if any(m in ("gru", "bilstm", "lstm", "mlp", "tcn", "transformer",
+                     "nlinear", "dlinear", "patchtst", "itransformer") for m in model_names):
+            _ensure_nn_imports()
 
     # Build flat schedule: (model, seed, horizon, fold_id)
     schedule: list[tuple[str, int, int, int]] = []
@@ -112,7 +132,10 @@ def run_all(
         header = (f"[{i:>4}/{len(schedule)}] {name}  seed={seed}  h={horizon}  "
                   f"fold={fold_id}  fit→{ts_fit[-1].strftime('%m-%d %H')}h")
         print(f"\n{header}")
-        set_seed(seed)
+        # Only init torch RNG for neural / sota models — torch import deadlocks
+        # LightGBM OpenMP on macOS otherwise.
+        torch_needed = info.tier in ("neural", "sota")
+        set_seed(seed, torch_too=torch_needed)
         t0 = time.time()
         try:
             preds, meta = info.fn(

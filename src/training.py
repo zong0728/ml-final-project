@@ -15,16 +15,20 @@ from . import config
 # Seeds
 # ============================================================================
 
-def set_seed(seed: int) -> None:
+def set_seed(seed: int, torch_too: bool = False) -> None:
+    """Set random seeds. Set torch_too=True ONLY for neural-net models —
+    importing torch here can deadlock with LightGBM OpenMP on macOS.
+    """
     random.seed(seed)
     np.random.seed(seed)
-    try:
-        import torch
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(seed)
-    except ImportError:
-        pass
+    if torch_too:
+        try:
+            import torch
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+        except ImportError:
+            pass
 
 
 # ============================================================================

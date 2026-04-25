@@ -7,8 +7,8 @@ from src.training import summarize_runs
 
 
 TREE_MODELS = [
-    "linreg_lag",
-    "ridge_lag",
+    # NOTE: linreg/ridge intentionally OFF — they OOM on h=48 (lag table is
+    # millions × 100 features, sklearn ridge cholesky doesn't scale).
     "lightgbm",
     "lightgbm_tweedie",
     "xgboost",

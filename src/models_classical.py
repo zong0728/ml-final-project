@@ -56,7 +56,8 @@ def _fit_predict_tabular(
 # Linear / Ridge
 # ============================================================================
 
-_TABULAR_ORIGIN_STRIDE = 4  # subsample origin hours to keep the feature matrix manageable
+_TABULAR_ORIGIN_STRIDE = 8  # subsample origin hours to keep the feature matrix manageable
+                            # 8 → ~950k rows for h=48, fits in 16GB RAM with LGB Dataset overhead
 
 
 @register(
