@@ -1,9 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=OUT_grid
+#SBATCH --account=bgyq-dtai-gh
 #SBATCH --partition=ghx4
 #SBATCH --time=04:00:00
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:1
+#SBATCH --gpus-per-node=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
 #SBATCH --output=scripts/h200/logs/OUT_grid_%j.out
