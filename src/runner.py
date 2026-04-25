@@ -38,6 +38,8 @@ from . import models_zero_inflated  # noqa: F401
 from . import models_ensemble       # noqa: F401
 from . import models_v2             # noqa: F401  (v2 feature-set tree models)
 from . import models_recursive      # noqa: F401  (recursive 1-step prediction)
+from . import data_pca              # noqa: F401  (PCA-reduced weather features)
+from . import models_storm_expert   # noqa: F401  (mixture-of-experts: global + storm)
 
 # models_advanced has both NN and tree models; only its tree-tier registers
 # imports lightgbm at call time, but the module-level imports include torch
