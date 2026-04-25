@@ -37,26 +37,27 @@ PRETTY = {
 }
 
 
-def render_table(summary: pd.DataFrame, horizon: int) -> str:
-    sub = summary[summary["horizon"] == horizon].copy()
-    sub = sub.sort_values("val_rmse_mean")
+def render_table(summary: pd.DataFrame, horizon: int, top_n: int = 12) -> str:
+    """Top-N models by median RMSE, with calm-period and storm-period split."""
+    sub = summary[(summary["horizon"] == horizon) & (summary["n"] >= 4)].copy()
+    sub = sub.sort_values("val_rmse_median").head(top_n)
     rows = []
     for _, r in sub.iterrows():
         nm = PRETTY.get(r["model"], r["model"].replace("_", "\\_"))
         rows.append(
-            f"  {nm} & {r['val_rmse_mean']:.1f} & "
-            f"{r['val_rmse_std']:.1f} & {r['val_rmse_min']:.1f} & "
-            f"{r['val_rmse_max']:.1f} & {int(r['n'])} \\\\"
+            f"  {nm} & {r['val_rmse_median']:.1f} & "
+            f"{r['calm_mean']:.1f} & {r['storm_rmse']:.0f} & "
+            f"{r['val_rmse_mean']:.1f} & {int(r['n'])} \\\\"
         )
     body = "\n".join(rows)
     return rf"""\begin{{table}}[t]
 \centering
-\caption{{{horizon}-hour rolling-origin CV: per-model RMSE (mean $\pm$ std across 6 folds, one seed). Lower is better. Fold count $n$ may be < 6 if a configuration was still in progress at writing time.}}
+\caption{{Top-{top_n} models on the {horizon}-hour rolling-origin CV, ranked by \textbf{{median RMSE across folds}}. The mean is dominated by fold 1 (the largest historical storm), so we use median as the typical-day metric and report calm-period (5-fold mean excluding storm) and storm-period (fold 1 only) separately. All values lower-is-better.}}
 \label{{tab:cv{horizon}}}
 \small
 \begin{{tabular}}{{lrrrrr}}
 \toprule
-Model & mean & std & min & max & $n$ \\
+Model & median & calm-mean & storm & mean(all) & $n$ \\
 \midrule
 {body}
 \bottomrule

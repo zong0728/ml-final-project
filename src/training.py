@@ -128,28 +128,65 @@ def already_ran_fold(model: str, seed: int, horizon: int, fold: int,
 def summarize_runs(csv_path: Path = config.RUNS_CSV) -> pd.DataFrame:
     """Aggregate per (model, horizon) across folds and seeds.
 
-    Reports mean/std/min/max RMSE plus number of (fold,seed) cells N.
+    Reports BOTH mean and median across folds.
+
+    Why median is the primary ranking signal here:
+        Our 6 rolling-origin folds include exactly one fold that lands in
+        the largest historical storm of the year (fold 1, peak 86k outages,
+        RMSE 700-900 for every single model regardless of architecture).
+        That one fold inflates mean RMSE by 5x relative to the typical fold.
+        Mean RMSE therefore measures "luck on a single OOD extreme event"
+        rather than "typical predictive quality". Median across folds gives
+        the typical-day RMSE that is meaningful for model selection.
+
+    Also returns:
+        rmse_calm_mean: average RMSE excluding fold 1 (the storm fold)
+        rmse_storm:     RMSE on fold 1 only (storm-period stress test)
     """
     df = load_runs(csv_path)
     if df.empty:
         return df
-    # First average over seeds within each (model, horizon, fold), then aggregate folds.
+    # First average over seeds within each (model, horizon, fold)
     per_fold = (
         df.groupby(["model", "horizon", "fold"])["val_rmse"]
         .mean().reset_index()
     )
+
+    # Drop legacy fold=-1 rows (single-window pre-CV runs) from aggregation
+    per_fold_real = per_fold[per_fold["fold"] >= 0].copy()
+
+    # Standard mean/median/std/min/max
     agg = (
-        per_fold.groupby(["model", "horizon"])["val_rmse"]
-        .agg(mean="mean", std="std", min="min", max="max", n="count")
+        per_fold_real.groupby(["model", "horizon"])["val_rmse"]
+        .agg(mean="mean", median="median", std="std", min="min", max="max", n="count")
         .reset_index()
     )
-    agg["val_rmse_mean"] = agg["mean"].round(4)
-    agg["val_rmse_std"] = agg["std"].fillna(0.0).round(4)
-    agg["val_rmse_min"] = agg["min"].round(4)
-    agg["val_rmse_max"] = agg["max"].round(4)
-    agg = agg[["model", "horizon", "val_rmse_mean", "val_rmse_std",
-               "val_rmse_min", "val_rmse_max", "n"]]
-    return agg.sort_values(["horizon", "val_rmse_mean"]).reset_index(drop=True)
+
+    # Calm-period mean (exclude fold 1, the big-storm fold)
+    calm = per_fold_real[per_fold_real["fold"] != 1].groupby(
+        ["model", "horizon"])["val_rmse"].mean().reset_index().rename(
+        columns={"val_rmse": "calm_mean"})
+    agg = agg.merge(calm, on=["model", "horizon"], how="left")
+
+    # Storm fold RMSE (fold 1 only)
+    storm = per_fold_real[per_fold_real["fold"] == 1].groupby(
+        ["model", "horizon"])["val_rmse"].mean().reset_index().rename(
+        columns={"val_rmse": "storm_rmse"})
+    agg = agg.merge(storm, on=["model", "horizon"], how="left")
+
+    agg["val_rmse_mean"]   = agg["mean"].round(4)
+    agg["val_rmse_median"] = agg["median"].round(4)
+    agg["val_rmse_std"]    = agg["std"].fillna(0.0).round(4)
+    agg["val_rmse_min"]    = agg["min"].round(4)
+    agg["val_rmse_max"]    = agg["max"].round(4)
+    agg["calm_mean"]       = agg["calm_mean"].round(4)
+    agg["storm_rmse"]      = agg["storm_rmse"].round(4)
+
+    agg = agg[["model", "horizon",
+                "val_rmse_median", "calm_mean", "storm_rmse",
+                "val_rmse_mean", "val_rmse_std", "val_rmse_min", "val_rmse_max", "n"]]
+    # Primary ranking: median (typical-day RMSE)
+    return agg.sort_values(["horizon", "val_rmse_median"]).reset_index(drop=True)
 
 
 def best_model_per_horizon(csv_path: Path = config.RUNS_CSV) -> dict[int, str]:

@@ -30,12 +30,33 @@ from src.evaluation import save_submission
 from src.registry import MODEL_REGISTRY
 from src.training import set_seed, summarize_runs
 
-# Trigger model registration (side effect imports). Tree-only here; neural
-# models are loaded lazily by the runner if needed.
+# Trigger model registration (side effect imports).
 from src import models_baselines      # noqa: F401
 from src import models_classical      # noqa: F401
 from src import models_zero_inflated  # noqa: F401
 from src import models_ensemble       # noqa: F401
+
+# Register grid-search models — names like lgb__nl31_lr10_n1500_ss7 only
+# enter MODEL_REGISTRY after these registration helpers run.
+from scripts.run_grid import (
+    register_lgb_grid, register_xgb_grid, register_cat_grid, register_lgb_tweedie_grid,
+)
+register_lgb_grid()
+register_xgb_grid()
+register_cat_grid()
+register_lgb_tweedie_grid()
+
+
+def _ensure_advanced_registered():
+    """Lazy register N-BEATS / N-HiTS / AutoARIMA / Quantile-LGB and the
+    neural grid (gru__, transformer__, etc.) — only call when needed,
+    because importing models_neural / models_advanced pulls in torch."""
+    from src import models_advanced     # noqa: F401  (auto_arima, lgb_quantile_*)
+    try:
+        from scripts.run_neural_grid import register_grid as register_nn_grid
+        register_nn_grid()
+    except Exception as e:
+        print(f"[finalize] warning: could not register NN grid: {e}")
 
 
 TEST_PRED_DIR = config.RESULTS_DIR / "test_preds"
@@ -62,25 +83,40 @@ def pick_topk(horizon: int, k: int,
         raise RuntimeError("No runs logged yet — run a training script first.")
     sub = s[s["horizon"] == horizon].copy()
     sub = sub[~sub["model"].str.startswith(exclude_prefixes)]
+    # Drop models that haven't been evaluated on enough folds — their "mean"
+    # is just one outlier observation. Need >=4 of the 6 folds.
+    sub = sub[sub["n"] >= 4]
     if sub.empty:
         raise RuntimeError(f"No eligible models for horizon={horizon}")
-    sub["score"] = sub["val_rmse_mean"] + stability_weight * sub["val_rmse_std"]
+    # Primary score: MEDIAN RMSE (robust to the storm-fold outlier).
+    # Stability term still uses std around the mean to penalize unstable models.
+    sub["score"] = sub["val_rmse_median"] + stability_weight * sub["val_rmse_std"]
     sub = sub.sort_values("score")
 
     if not prefer_diversity:
         return sub.head(k)["model"].tolist()
 
-    # Pick top-K with at most 2 configs per family. Family = prefix before "__".
+    # Pick top-K with at most 2 configs per family. Also dedup ties: if two
+    # models have the *exact same* RMSE (typical for tree models with
+    # different subsample seeds where the seed barely affects bagging),
+    # they're effectively the same model — keep only one.
     picked: list[str] = []
+    seen_rmses: list[float] = []
     family_count: dict[str, int] = {}
     max_per_family = 2
     for _, row in sub.iterrows():
         if len(picked) >= k:
             break
+        # Skip exact RMSE duplicates (tree models with same hparams
+        # different seed often have identical CV results).
+        rmse = float(row["val_rmse_mean"])
+        if any(abs(rmse - r) < 1e-4 for r in seen_rmses):
+            continue
         fam = row["model"].split("__", 1)[0]
         if family_count.get(fam, 0) >= max_per_family:
             continue
         picked.append(row["model"])
+        seen_rmses.append(rmse)
         family_count[fam] = family_count.get(fam, 0) + 1
     # If diversity filter starved us (rare), fall back to mean ranking
     while len(picked) < k:
