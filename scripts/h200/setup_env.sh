@@ -18,11 +18,32 @@ else
 fi
 cd "$PROJ_DIR"
 
+# Make sure the dataset directory exists for rsync from the laptop.
+mkdir -p "$PROJ_DIR/dataset/data"
+
 echo ">>> Loading DeltaAI Python module (provides conda + torch on aarch64)"
 module load python/miniforge3_pytorch/2.10.0
 
+# DeltaAI's miniforge base lives in /sw/user/... and is read-only. By default
+# conda still tries to write its repodata cache there and fails. Redirect
+# every writable conda path to the user's home.
+export CONDA_PKGS_DIRS="$HOME/.conda/pkgs"
+export CONDA_ENVS_DIRS="$HOME/.conda/envs"
+mkdir -p "$CONDA_PKGS_DIRS" "$CONDA_ENVS_DIRS"
+
+# Per-user condarc — also routes the package cache and notice cache home.
+cat > "$HOME/.condarc" <<'YAML'
+pkgs_dirs:
+  - ${HOME}/.conda/pkgs
+envs_dirs:
+  - ${HOME}/.conda/envs
+notify_outdated_conda: false
+auto_activate_base: false
+channels:
+  - conda-forge
+YAML
+
 echo ">>> Creating conda env '$ENV_NAME' (Python 3.11) — sandboxed under \$HOME"
-# Use --prefix so we don't collide with the diffusion project's envs path.
 ENV_PATH="$HOME/.conda/envs/$ENV_NAME"
 if [[ ! -d "$ENV_PATH" ]]; then
   conda create -p "$ENV_PATH" python=3.11 -y
