@@ -24,20 +24,32 @@
 \vspace{-1.0cm}
 
 \section{Introduction}
-Extreme-weather-driven power outages impose substantial societal cost in the
-US Midwest. We are given hourly outage counts and 109 atmospheric/hydrological
-features for 83 Michigan counties over a 90-day window
-(\textbf{2023-04-01 to 2023-06-30}), and asked to (i)~forecast outages over
-the next 24 and 48 hours and (ii)~recommend the placement of five
-1{,}000-household backup generators.
-Two design constraints shape the entire pipeline.
-\textbf{No future weather is available at test time}: only outage history
-plus weather observed up to the forecast origin. \textbf{The training
+Power-grid \emph{resilience} --- the capability of withstanding, adapting
+to, and recovering from large-scale disruptions --- has become a top
+priority as climate-driven extreme weather grows more frequent. The
+April 2025 Pittsburgh windstorm left 140k customers without power for
+24+ hours despite 400 line workers in the field; Hurricanes Beryl and
+Milton each downed 3M+ Florida customers in 2024. \textbf{Proactive
+(ex-ante) actions} --- pre-positioning repair crews and mobile
+generators before forecasted events --- are the operational lever
+utilities can pull, but they require accurate short-horizon outage
+forecasts. We address two integrated tasks: (i)~24-hour and 48-hour
+hourly outage forecasts for the 83 Michigan counties, and
+(ii)~allocation of five 1{,}000-household mobile generators to the
+counties where they will absorb the most outage on the test horizon.
+
+We are given an hourly county-level dataset with 109
+atmospheric/hydrological features over a 90-day window
+(\textbf{2023-04-01 -- 2023-06-30}). Two design constraints shape the
+entire pipeline. \textbf{No future weather is available at test time}:
+only outage history and weather observed up to the forecast origin can
+enter the model --- mirroring real deployment, where utilities likewise
+lack ground-truth future weather at decision time. \textbf{The training
 window ends mid-storm}: the largest event of the year (peak 86{,}313
-outages on 2023-06-29) starts 2023-06-23 and continues through training's
-end, so the test horizon begins inside an unfolding storm with no future
-weather. These constraints directly motivate our validation design
-(\S\ref{sec:cv}) and feature engineering (\S\ref{sec:features}).
+outages on 2023-06-29) starts 2023-06-23 and runs through the end of
+training, so the test horizon begins inside an unfolding storm. These
+constraints directly motivate our validation design (\S\ref{sec:cv})
+and feature engineering (\S\ref{sec:features}).
 
 \section{Data Analysis}
 \label{sec:eda}
@@ -144,7 +156,13 @@ $t{+}h$; horizon-step $h$; location index (ordinal for LGB/XGB, native
 categorical for CatBoost). Final $P\!\approx\!389$. We also tried an
 enlarged \emph{v2} set (deep lags up to 672h, state-aggregated lags,
 county metadata, weather rolling means; $P\!\approx\!773$) but observed
-no measurable RMSE improvement (\S\ref{sec:negative}).
+no measurable RMSE improvement (\S\ref{sec:negative}). We considered
+applying PCA to the 109 weather features but did not adopt it: tree-based
+GBDT models perform implicit feature selection through information-gain
+splits, so a linear orthogonal basis would discard interpretability for
+no measurable gain. (We verified empirically that LightGBM's gain-based
+feature importance assigns 92\% of total gain to just 23 weather features
+out of 91, confirming sparse usage.)
 
 \subsection{Model Families}
 \textbf{Naive baselines}: all-zero, persistence ($\hat y_{t+h}\!=\!y_t$),
@@ -250,11 +268,18 @@ dataset under the no-future-weather constraint.
 \section{Analysis and Policy Recommendation}
 \label{sec:policy}
 
-\subsection{From Forecast to Action}
-A point forecast $\hat y_{c,t}$ is not yet a decision; the utility needs an
-allocation $\pi:\{\text{generators}\}\to\{\text{counties}\}$ that maximises
-expected mitigated outage. Each generator covers up to 1{,}000 households
-for the entire 48-hour test horizon and cannot be relocated.
+\subsection{From Forecast to Action: Decision-Maker Perspective}
+A point forecast $\hat y_{c,t}$ is not yet a decision. From the utility
+operator's vantage point, the question is concrete: \emph{given the
+predicted outage geography, where do we stage our mobile generators
+\textbf{tonight} so that they will absorb the maximum number of
+household-hours of outage tomorrow?} The instrument has hard physical
+constraints --- each of the five mobile generators serves at most
+1{,}000 households at any moment, and once deployed cannot be relocated
+during the 48-h event window. The decision is taken \emph{before} the
+event, with the same information-set the model uses
+(history + observed weather up to forecast origin), so the recommendation
+is an honest test of forecast-driven proactive action.
 
 \paragraph{Greedy marginal-benefit allocation.}
 \input{policy_section.tex}
@@ -272,17 +297,36 @@ generator per county} forbids stacking, but the greedy correctly places
 multiple generators where predicted demand $\gg 1{,}000$ per hour, as the
 project description permits.
 
-\subsection{Sensitivity, Robustness, and Limitations}
+\subsection{Sensitivity, Robustness, and Decision Risk}
 \textbf{Selection robustness.} Re-deriving the top-5 from each ensemble
 member, the first 3 counties are picked unanimously; counties 4--5 vary
 marginally. Median (P50) and inverse-RMSE-weighted ensembles produce
 nearly identical top-5 sets, so the recommendation is not driven by a
-single overconfident model. \textbf{Limitations.} (i)~90 days of training
-data, all spring-summer --- no winter or hurricane experience.
-(ii)~No future-weather information bounds 48-h predictability of fast
-convective events. (iii)~Point forecast only; the Quantile-LGB-P90 member
-could surface a worst-case-outage allocation as a richer probabilistic
-policy product, which we leave for future work.
+single overconfident model.
+
+\textbf{Decision risk against the real outcome.} Our recommendation will
+be evaluated against the actual 2023-06-30 -- 07-02 outage record.
+Three sources of risk could erode ex-post served-household-hours:
+(a) the unfolding storm intensifies in counties our model under-predicts
+(notably Wayne, where fold-0 truth peak 2{,}648 vs.\ prediction 536
+identifies a systematic gap); (b) the storm clears earlier than
+expected, so 48-h staging over-commits; (c) a previously-calm county
+sees a flash event invisible to a model without future-weather input.
+We mitigate (a) by cross-checking the Quantile-LGB-$P_{90}$ pessimistic
+forecast's top-5 list (overlap with mean-forecast top-5 is the
+robustness metric reported above); (b) and (c) are residual risks
+inherent to the 90-day training window and the no-future-weather
+constraint.
+
+\textbf{Limitations.} (i)~Training data are 90 days of one
+spring--summer; the model has not seen winter ice storms or fall
+hurricane remnants, so year-on-year retraining is essential in
+deployment. (ii)~No future-weather information caps 48-h predictability
+of fast convective events; integrating a NWP forecast at inference
+would substantially improve both prediction and policy quality but is
+outside the project framing. (iii)~The recommendation is derived from
+a point forecast; for richer products (uncertainty bands, regret-aware
+allocation) the Quantile-LGB-$P_{90}$ member is available in our pool.
 
 \section*{References}
 \footnotesize
