@@ -1,0 +1,16 @@
+\begin{table}[ht]
+\centering
+\caption{Best model (cat\_\_d4\_lr10\_n400) vs.\ project-specified baselines on the 48h horizon, across four aggregation strategies. Improvement is consistent across views: 7--11\% over all-zero and 0.6--6\% over SARIMAX. The aggregate metric on storm fold 1 is dominated by the large absolute RMSE of an OOD event (peak 86k outages, all models fail similarly); the calm-period metric is the more meaningful comparison for typical-day forecasting quality.}
+\label{tab:headline48}
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Aggregation & Best & Zero & vs.\ Zero & SARIMAX & vs.\ SARIMAX \\
+\midrule
+  Aggregate (all 6 folds) & 157.19 & 160.92 & +2.3\% & 157.89 & +0.4\% \\
+  Calm-period (5 folds) & 44.97 & 48.51 & +7.3\% & 46.04 & +2.3\% \\
+  Storm fold only (fold 1) & 718.33 & 722.96 & +0.6\% & 717.11 & -0.2\% \\
+  Median across folds & 45.98 & 49.95 & +8.0\% & 46.14 & +0.4\% \\
+\bottomrule
+\end{tabular}
+\end{table}

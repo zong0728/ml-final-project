@@ -1,22 +1,20 @@
-\begin{table}[t]
+\begin{table}[ht]
 \centering
-\caption{48-hour rolling-origin CV: per-model RMSE (mean $\pm$ std across 6 folds, one seed). Lower is better. Fold count $n$ may be < 6 if a configuration was still in progress at writing time.}
+\caption{Top-8 models on the 48-hour rolling-origin CV (6 folds, val window matches test setup). Ranked by \textbf{calm-period mean RMSE} (5 non-storm folds), since fold~1 is dominated by the year's largest storm event (peak 86k outages) where every model has RMSE 700--900 regardless of architecture. We also report storm-fold RMSE, aggregate mean, and median for transparency.}
 \label{tab:cv48}
 \small
 \begin{tabular}{lrrrrr}
 \toprule
-Model & mean & std & min & max & $n$ \\
+Model & calm-mean & storm & all-mean & median & $n$ \\
 \midrule
-  SARIMAX(1,0,1) per county & 157.9 & 274.2 & 33.9 & 717.1 & 6 \\
-  LightGBM (log target) & 158.8 & 274.6 & 33.2 & 718.6 & 6 \\
-  All-zero & 160.9 & 275.6 & 34.0 & 723.0 & 6 \\
-  Linear regression on lag features & 161.0 & 275.4 & 34.1 & 722.6 & 6 \\
-  Persistence ($y_t$ repeated) & 178.7 & 286.1 & 33.5 & 759.8 & 6 \\
-  Hist.\ mean (county$\times$hour$\times$dow) & 179.5 & 261.7 & 64.2 & 713.3 & 6 \\
-  Seasonal naive (168h) & 183.2 & 263.2 & 51.5 & 719.8 & 6 \\
-  Seasonal naive (24h) & 217.9 & 270.3 & 35.9 & 737.6 & 6 \\
-  LightGBM (Tweedie loss) & 393.9 & 457.5 & 70.4 & 717.4 & 2 \\
-  Ridge ($\alpha{=}1$) & 1712.5 & 0.0 & 1712.5 & 1712.5 & 1 \\
+  cat\_\_d4\_lr10\_n400 & 44.97 & 718 & 157.19 & 45.98 & 6 \\
+  cat\_\_d4\_lr10\_n800 & 45.41 & 718 & 157.59 & 45.97 & 6 \\
+  cat\_\_d6\_lr03\_n400 & 45.43 & 718 & 157.54 & 46.37 & 6 \\
+  cat\_\_d6\_lr05\_n400 & 45.43 & 718 & 157.57 & 46.36 & 6 \\
+  xgb\_\_d8\_lr03\_n400 & 45.47 & 719 & 157.67 & 45.79 & 6 \\
+  lgb\_\_nl63\_lr03\_n400\_ss7 & 45.53 & 718 & 157.63 & 45.99 & 6 \\
+  lgb\_\_nl63\_lr03\_n400\_ss9 & 45.53 & 718 & 157.63 & 45.99 & 6 \\
+  two\_stage\_lgb & 45.57 & 718 & 157.59 & 46.37 & 6 \\
 \bottomrule
 \end{tabular}
 \end{table}

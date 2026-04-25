@@ -37,7 +37,7 @@ PRETTY = {
 }
 
 
-def render_table(summary: pd.DataFrame, horizon: int, top_n: int = 12) -> str:
+def render_table(summary: pd.DataFrame, horizon: int, top_n: int = 8) -> str:
     """Top-N models on rolling-origin CV. Reports both calm-period and
     aggregate-mean RMSE so reviewers can see both views.
     """
@@ -52,7 +52,7 @@ def render_table(summary: pd.DataFrame, horizon: int, top_n: int = 12) -> str:
             f"{r['val_rmse_median']:.2f} & {int(r['n'])} \\\\"
         )
     body = "\n".join(rows)
-    return rf"""\begin{{table}}[t]
+    return rf"""\begin{{table}}[ht]
 \centering
 \caption{{Top-{top_n} models on the {horizon}-hour rolling-origin CV (6 folds, val window matches test setup). Ranked by \textbf{{calm-period mean RMSE}} (5 non-storm folds), since fold~1 is dominated by the year's largest storm event (peak 86k outages) where every model has RMSE 700--900 regardless of architecture. We also report storm-fold RMSE, aggregate mean, and median for transparency.}}
 \label{{tab:cv{horizon}}}
@@ -103,7 +103,7 @@ def render_baseline_comparison(summary: pd.DataFrame, horizon: int) -> str:
         )
     body = "\n".join(rows)
     best_nm = PRETTY.get(best["model"], best["model"].replace("_", "\\_"))
-    return rf"""\begin{{table}}[t]
+    return rf"""\begin{{table}}[ht]
 \centering
 \caption{{Best model ({best_nm}) vs.\ project-specified baselines on the {horizon}h horizon, across four aggregation strategies. Improvement is consistent across views: 7--11\% over all-zero and 0.6--6\% over SARIMAX. The aggregate metric on storm fold 1 is dominated by the large absolute RMSE of an OOD event (peak 86k outages, all models fail similarly); the calm-period metric is the more meaningful comparison for typical-day forecasting quality.}}
 \label{{tab:headline{horizon}}}
