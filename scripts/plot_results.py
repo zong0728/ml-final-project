@@ -105,6 +105,11 @@ def main():
     for h in [24, 48]:
         sub = summary[(summary["horizon"] == h) & (summary["n"] >= 4)].copy()
         if sub.empty: continue
+        # ridge_lag is technically valid but the linear model with log target
+        # extrapolates wildly on storm-adjacent fold 0 (RMSE ~1200) — its
+        # calm_mean of ~270 dominates the x-axis and obscures the GBDT cluster.
+        # Same reason linreg_lag was excluded earlier.
+        sub = sub[~sub["model"].str.startswith(("ridge_lag", "linreg_lag"))]
         sub["family"] = sub["model"].apply(_family_of)
         best_per_fam = sub.loc[sub.groupby("family")["val_rmse_median"].idxmin()].copy()
         best_per_fam = best_per_fam.sort_values("calm_mean")
