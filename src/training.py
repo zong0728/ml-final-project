@@ -41,6 +41,14 @@ _LOG_COLS = [
 ]
 
 
+def _resolved_csv_path(csv_path: Path) -> Path:
+    """Allow per-process CSV to avoid concurrent-write corruption from sbatch
+    array jobs. If env var OUTAGE_RUNS_CSV is set, use that. Otherwise default."""
+    import os
+    override = os.environ.get("OUTAGE_RUNS_CSV")
+    return Path(override) if override else csv_path
+
+
 def log_run_fold(
     model_name: str,
     seed: int,
@@ -52,6 +60,8 @@ def log_run_fold(
     csv_path: Path = config.RUNS_CSV,
 ) -> None:
     """Append one (model, seed, horizon, fold) row."""
+    csv_path = _resolved_csv_path(csv_path)
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
     row = {
         "timestamp": pd.Timestamp.now().isoformat(timespec="seconds"),
         "model": model_name,
@@ -80,6 +90,7 @@ def log_run(
 
 
 def load_runs(csv_path: Path = config.RUNS_CSV) -> pd.DataFrame:
+    csv_path = _resolved_csv_path(csv_path)
     if not csv_path.exists():
         return pd.DataFrame(columns=_LOG_COLS)
     df = pd.read_csv(csv_path)

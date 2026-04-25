@@ -28,6 +28,11 @@ cd "$SLURM_SUBMIT_DIR"
 echo "[OUT_grid] host=$(hostname) gpu=$(nvidia-smi -L | head -1)"
 echo "[OUT_grid] grid=$GRID_NAME  start=$(date)"
 
+# Per-job CSV to avoid concurrent-write corruption.
+mkdir -p results/runs_per_task
+export OUTAGE_RUNS_CSV="results/runs_per_task/grid_${GRID_NAME}_${SLURM_JOB_ID}.csv"
+echo "[OUT_grid] writing to $OUTAGE_RUNS_CSV"
+
 python -m scripts.run_grid --grid "$GRID_NAME"
 
 echo "[OUT_grid] done $(date)"

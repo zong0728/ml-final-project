@@ -205,8 +205,10 @@ def _train_and_predict(
 
     # --- Dataloaders ---
     tr_ds = TensorDataset(torch.from_numpy(X_tr), torch.from_numpy(Y_tr))
+    # num_workers=0: avoid macOS multiprocessing issues + lower overhead
+    # for our small dataset (~10s of MB). Linux H200 also fine with 0.
     tr_dl = DataLoader(tr_ds, batch_size=batch_size, shuffle=True,
-                       num_workers=2, pin_memory=(device == "cuda"))
+                       num_workers=0, pin_memory=(device == "cuda"))
     X_val_t = torch.from_numpy(X_val).to(device, non_blocking=True)
     Y_val_t = torch.from_numpy(Y_val).to(device, non_blocking=True)
 
