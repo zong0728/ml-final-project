@@ -27,8 +27,12 @@ echo "==== 3. CV summary plots ===="
 python -m scripts.plot_results
 
 echo
-echo "==== 4. Final ensemble + 5-county policy ===="
-python -m scripts.finalize --topk 5 --seeds 42 43
+echo "==== 3b. Hyperparameter sensitivity plots ===="
+python -m scripts.plot_hparam_sensitivity
+
+echo
+echo "==== 4. Final ensemble + 5-county policy (auto strategy) ===="
+python -m scripts.finalize --topk 5 --seeds 42 43 --stability-weight 0.3 --strategy auto
 
 echo
 echo "==== 5. Report tables + PDF ===="
