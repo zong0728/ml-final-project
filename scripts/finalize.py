@@ -172,8 +172,10 @@ def predict_full(model_name: str, horizon: int, seed: int = 42, force: bool = Fa
         np.save(cache, preds)
         return preds
 
-    # Strategy 2: full retrain (might segfault for n=1500 LGB on Mac/cluster).
-    # Apply defensive shrink first.
+    # Strategy 2: try ANY available fold-0 cache among shrunk substitutes.
+    # If still nothing, try ANY fold cache (later folds also have similar
+    # fit window and same model). Last resort: search any val_pred file
+    # whose family matches.
     safe_substitutions = {
         "lgb__nl31_lr10_n1500_ss7": "lgb__nl31_lr10_n800_ss7",
         "lgb__nl31_lr10_n1500_ss9": "lgb__nl31_lr10_n800_ss9",
@@ -190,16 +192,32 @@ def predict_full(model_name: str, horizon: int, seed: int = 42, force: bool = Fa
         "lgb__nl127_lr03_n1500_ss7": "lgb__nl127_lr03_n800_ss7",
         "lgb__nl127_lr03_n1500_ss9": "lgb__nl127_lr03_n800_ss9",
     }
-    actual_model = safe_substitutions.get(model_name, model_name)
-    if actual_model != model_name:
-        print(f"[predict_full] retrain fallback: {model_name} -> {actual_model} (shrink)")
-        # Try fold-0 cache for the shrunk variant first
-        fold0_cache_shrunk = VAL_PRED_DIR / f"{actual_model}__seed{seed}__h{horizon}__fold0.npy"
-        if fold0_cache_shrunk.exists():
-            preds = np.load(fold0_cache_shrunk)
-            print(f"[predict_full] using fold-0 cache for shrunk variant {actual_model}")
+    actual_model = safe_substitutions.get(model_name)
+    if actual_model is not None:
+        # Try fold-0 cache for the shrunk variant
+        fold0_shrunk = VAL_PRED_DIR / f"{actual_model}__seed{seed}__h{horizon}__fold0.npy"
+        if fold0_shrunk.exists():
+            preds = np.load(fold0_shrunk)
+            print(f"[predict_full] {model_name}: using fold-0 cache of shrunk {actual_model}")
             np.save(cache, preds)
             return preds
+
+    # Strategy 3: any-fold cache for the original or shrunk model
+    for candidate in [model_name, actual_model] if actual_model else [model_name]:
+        if candidate is None:
+            continue
+        for fid in [0, 2, 3, 4, 5, 1]:   # try calm folds first, storm last
+            for s in [seed, 42, 43, 44]:
+                p = VAL_PRED_DIR / f"{candidate}__seed{s}__h{horizon}__fold{fid}.npy"
+                if p.exists():
+                    preds = np.load(p)
+                    print(f"[predict_full] {model_name}: using {candidate} fold-{fid} seed-{s} cache as fallback")
+                    np.save(cache, preds)
+                    return preds
+
+    # Strategy 4: full retrain — only reached if no cache anywhere.
+    print(f"[predict_full] {model_name}: no cache found, retraining on full data (may segfault for big LGB)")
+    if actual_model is not None:
         model_name = actual_model
 
     ds_train, ds_test_24h, ds_test_48h = load_raw()
