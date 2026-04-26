@@ -214,26 +214,11 @@ def predict_full(model_name: str, horizon: int, seed: int = 42, force: bool = Fa
                     np.save(cache, preds)
                     return preds
 
-    # Strategy 4: full retrain — only reached if no cache anywhere.
-    print(f"[predict_full] {model_name}: no cache found, retraining on full data (may segfault for big LGB)")
-    if actual_model is not None:
-        model_name = actual_model
-
-    ds_train, ds_test_24h, ds_test_48h = load_raw()
-    ds_train_f = drop_zero_variance_features(ds_train)
-    out_full, weather_full, locations, _, ts_full = get_arrays(ds_train_f)
-
-    info = MODEL_REGISTRY[model_name]
-    set_seed(seed)
-    preds, meta = info.fn(
-        out_fit=out_full, weather_fit=weather_full,
-        timestamps_fit=ts_full, locations=locations,
-        horizon=horizon, seed=seed,
+    raise RuntimeError(
+        f"{model_name} h={horizon} seed={seed}: no fold cache anywhere. "
+        f"Refusing to full-retrain (single-thread on login node would block for "
+        f"~20 min and risks segfault). build_ensemble will skip this member."
     )
-    if preds.shape != (horizon, len(locations)):
-        raise ValueError(f"{model_name} returned {preds.shape}, expected ({horizon},{len(locations)})")
-    np.save(cache, preds)
-    return preds
 
 
 def build_ensemble(model_names: list[str], horizon: int, seeds: list[int],
