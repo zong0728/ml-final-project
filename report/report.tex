@@ -8,6 +8,7 @@
 \usepackage[hidelinks]{hyperref}
 \usepackage{microtype}
 \usepackage{enumitem}
+\usepackage{float}
 \setlist{itemsep=0pt, topsep=2pt, parsep=0pt}
 \captionsetup{font=small,skip=2pt}
 \usepackage{titlesec}
@@ -92,9 +93,9 @@ water, and the storm-motion magnitude \texttt{vstm}). We retain all 91
 non-zero-variance features and rely on tree-based models to perform
 implicit selection.
 
-\begin{figure}[ht]
+\begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{../results/figures/statewide_outage.png}
+\includegraphics[width=0.85\linewidth]{../results/figures/statewide_outage.png}
 \caption{State-wide hourly outage on a symmetric-log scale. Orange marks
 the 26 detected storm events; the red dashed line marks the
 2{,}000-outage threshold. The disproportionately large terminal event
@@ -102,7 +103,7 @@ ends precisely at the train/test boundary.}
 \label{fig:state}
 \end{figure}
 
-\begin{figure}[ht]
+\begin{figure}[H]
 \centering
 \begin{subfigure}[b]{0.32\linewidth}
 \includegraphics[width=\linewidth]{../results/figures/outage_distribution.png}
@@ -144,7 +145,7 @@ calm-period mean RMSE: the former captures cross-period performance,
 including the OOD storm, while the latter captures typical-day quality
 without a single extreme event dominating the score.
 
-\begin{figure}[ht]
+\begin{figure}[H]
 \centering
 \includegraphics[width=0.85\linewidth]{../results/figures/cv_diagram.png}
 \caption{Layout of the rolling-origin CV. Blue marks the
@@ -274,7 +275,7 @@ immediately adjacent to the test horizon) is the most difficult calm
 fold across all families, with RMSE in the 70--90 range against 19--44
 elsewhere.
 
-\begin{figure}[ht]
+\begin{figure}[H]
 \centering
 \includegraphics[width=0.78\linewidth]{../results/figures/cv_per_family_h24.png}
 \caption{Best configuration per family at the 24h horizon. Left:
@@ -284,26 +285,19 @@ to 700--900).}
 \label{fig:per_family}
 \end{figure}
 
-\input{cv_table_h24.tex}
-\input{cv_table_h48.tex}
-
-\begin{figure}[ht]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.85\linewidth]{../results/figures/cv_family_fold_h24.png}
+\includegraphics[width=0.7\linewidth]{../results/figures/cv_family_fold_h24.png}
 \caption{Per-family $\times$ per-fold RMSE on the 24h horizon (best
-configuration of each family). Three patterns are visible. The 13
-GBDT-family rows at the top are homogeneous on calm folds (RMSE 39--47),
-which indicates saturation. The sequence-NN families below them
-(Transformer, GRU, BiLSTM, TCN, N-BEATS) lose 10--30 RMSE units on calm
-folds, despite extensive hyperparameter sweeps. Every family lands in
-the 700--950 RMSE band on storm fold 1 (right column, separate scale),
-which confirms that storm-event extrapolation is bounded by data rather
-than by architecture. The anomalously low storm-fold RMSE of
-\texttt{persistence} (660) is the single exception: copying the value
-of the previous hour happens to align with storm continuation, but it
-loses elsewhere.}
+configuration of each family). The storm fold (right column) uses a
+separate scale. The anomalously low storm RMSE of
+\texttt{persistence} (660) reflects accidental alignment with storm
+continuation rather than predictive skill.}
 \label{fig:family_fold}
 \end{figure}
+
+\input{cv_table_h24.tex}
+\input{cv_table_h48.tex}
 
 \subsection{What Did Not Improve the Result}
 \label{sec:negative}
