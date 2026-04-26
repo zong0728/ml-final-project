@@ -77,6 +77,8 @@ def render_baseline_comparison(summary: pd.DataFrame, horizon: int) -> str:
     excl_baselines = ("zero", "sarimax", "persistence", "seasonal_naive",
                       "historical_mean", "linreg_lag", "ridge_lag")
     cand = sub[~sub["model"].str.startswith(excl_baselines)].copy()
+    if cand.empty:
+        return ""
     best = cand.sort_values("calm_mean").iloc[0]
 
     z = sub[sub["model"] == "zero"]
