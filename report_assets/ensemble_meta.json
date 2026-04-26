@@ -1,16 +1,16 @@
 {
   "topk_h24": [
-    "lgb__nl31_lr10_n1500_ss7",
-    "lgb__nl127_lr10_n1500_ss9",
-    "xgb__d6_lr10_n800",
-    "xgb__d8_lr10_n800",
-    "cat__d4_lr10_n800"
+    "xgb_pca20",
+    "cat_v2",
+    "lgb_pca20",
+    "cat__d8_lr03_n400",
+    "lgb_quantile_p50"
   ],
   "strategy_h24": "mean",
   "topk_h48": [
     "lgb_pca30",
-    "lgb_pca20",
     "xgb_pca20",
+    "lgb_pca20",
     "cat_v2",
     "cat_pca20"
   ],
@@ -19,5 +19,5 @@
     42,
     43
   ],
-  "stability_weight": 0.3
+  "stability_weight": 0.0
 }

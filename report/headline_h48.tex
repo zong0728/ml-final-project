@@ -1,16 +1,16 @@
 \begin{table}[ht]
 \centering
-\caption{Best 48h model (cat\_\_d4\_lr10\_n400) vs.\ all-zero and SARIMAX baselines, across four aggregation views.}
+\caption{Best 48h model (lgb\_pca30) vs.\ all-zero and SARIMAX baselines, across four aggregation views.}
 \label{tab:headline48}
 \small
 \begin{tabular}{lrrrrr}
 \toprule
 Aggregation & Best & Zero & vs.\ Zero & SARIMAX & vs.\ SARIMAX \\
 \midrule
-  Aggregate (all 6 folds) & 157.19 & 160.92 & +2.3\% & 157.89 & +0.4\% \\
-  Calm-period (5 folds) & 44.97 & 48.51 & +7.3\% & 46.04 & +2.3\% \\
-  Storm fold only (fold 1) & 718.33 & 722.96 & +0.6\% & 717.11 & -0.2\% \\
-  Median across folds & 45.98 & 49.95 & +8.0\% & 46.14 & +0.4\% \\
+  Aggregate (all 6 folds) & 156.83 & 160.92 & +2.5\% & 157.89 & +0.7\% \\
+  Calm-period (5 folds) & 44.54 & 48.51 & +8.2\% & 46.04 & +3.3\% \\
+  Storm fold only (fold 1) & 718.27 & 722.96 & +0.6\% & 717.11 & -0.2\% \\
+  Median across folds & 46.36 & 49.95 & +7.2\% & 46.14 & -0.5\% \\
 \bottomrule
 \end{tabular}
 \end{table}
