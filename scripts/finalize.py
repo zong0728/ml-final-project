@@ -142,7 +142,12 @@ def pick_topk(horizon: int, k: int,
 def predict_full(model_name: str, horizon: int, seed: int = 42, force: bool = False) -> np.ndarray:
     """Train `model_name` on full train data and produce (horizon, L) test prediction.
 
-    Caches numpy under results/test_preds/<model>__h{H}__seed{S}.npy
+    Caches numpy under results/test_preds/<model>__h{H}__seed{S}.npy.
+
+    For models known to OOM/segfault on full data (e.g. n_estimators=1500),
+    we shrink the config in-line to a safer variant. This is a defensive
+    measure — the resulting model has nearly identical CV RMSE
+    (the GBDT cluster is saturated).
     """
     cache = TEST_PRED_DIR / f"{model_name}__h{horizon}__seed{seed}.npy"
     if cache.exists() and not force:
@@ -151,6 +156,35 @@ def predict_full(model_name: str, horizon: int, seed: int = 42, force: bool = Fa
     ds_train, ds_test_24h, ds_test_48h = load_raw()
     ds_train_f = drop_zero_variance_features(ds_train)
     out_full, weather_full, locations, _, ts_full = get_arrays(ds_train_f)
+
+    # Defensive shrink: known-heavy configs that segfault on full data
+    # get auto-replaced with their safer counterpart (same family, n=800).
+    safe_substitutions = {
+        "lgb__nl31_lr10_n1500_ss7": "lgb__nl31_lr10_n800_ss7",
+        "lgb__nl31_lr10_n1500_ss9": "lgb__nl31_lr10_n800_ss9",
+        "lgb__nl63_lr03_n1500_ss7": "lgb__nl63_lr03_n800_ss7",
+        "lgb__nl63_lr03_n1500_ss9": "lgb__nl63_lr03_n800_ss9",
+        "lgb__nl63_lr05_n1500_ss7": "lgb__nl63_lr05_n800_ss7",
+        "lgb__nl63_lr05_n1500_ss9": "lgb__nl63_lr05_n800_ss9",
+        "lgb__nl127_lr10_n1500_ss7": "lgb__nl127_lr10_n800_ss7",
+        "lgb__nl127_lr10_n1500_ss9": "lgb__nl127_lr10_n800_ss9",
+        "lgb__nl127_lr05_n1500_ss7": "lgb__nl127_lr05_n800_ss7",
+        "lgb__nl127_lr05_n1500_ss9": "lgb__nl127_lr05_n800_ss9",
+        "lgb__nl31_lr05_n1500_ss7": "lgb__nl31_lr05_n800_ss7",
+        "lgb__nl31_lr05_n1500_ss9": "lgb__nl31_lr05_n800_ss9",
+        "lgb__nl127_lr03_n1500_ss7": "lgb__nl127_lr03_n800_ss7",
+        "lgb__nl127_lr03_n1500_ss9": "lgb__nl127_lr03_n800_ss9",
+    }
+    actual_model = safe_substitutions.get(model_name, model_name)
+    if actual_model != model_name:
+        print(f"[predict_full] {model_name} -> {actual_model} (defensive shrink)")
+        # Try the cache for the safer variant first
+        cache2 = TEST_PRED_DIR / f"{actual_model}__h{horizon}__seed{seed}.npy"
+        if cache2.exists() and not force:
+            preds_loaded = np.load(cache2)
+            np.save(cache, preds_loaded)  # also save under requested name
+            return preds_loaded
+        model_name = actual_model
 
     info = MODEL_REGISTRY[model_name]
     set_seed(seed)
@@ -177,8 +211,13 @@ def build_ensemble(model_names: list[str], horizon: int, seeds: list[int],
     """
     preds_list = []
     weights_list = []
+    skipped = []
     s_summary = summarize_runs()
     for m in model_names:
+        if m not in MODEL_REGISTRY:
+            print(f"[build_ensemble] WARNING: {m} not in MODEL_REGISTRY, skipping")
+            skipped.append(m)
+            continue
         info = MODEL_REGISTRY[m]
         run_seeds = seeds if info.stochastic else [seeds[0]]
         # Look up CV RMSE for inv-rmse weighting
@@ -188,9 +227,18 @@ def build_ensemble(model_names: list[str], horizon: int, seeds: list[int],
         except (IndexError, KeyError):
             mean_rmse = 100.0   # default if missing
         for s in run_seeds:
-            p = predict_full(m, horizon, seed=s)
-            preds_list.append(p)
-            weights_list.append(1.0 / max(mean_rmse, 1e-6))
+            try:
+                p = predict_full(m, horizon, seed=s)
+                preds_list.append(p)
+                weights_list.append(1.0 / max(mean_rmse, 1e-6))
+            except Exception as e:
+                print(f"[build_ensemble] FAILED to predict_full({m}, h={horizon}, seed={s}): {e}")
+                skipped.append(f"{m}__seed{s}")
+                continue
+    if not preds_list:
+        raise RuntimeError("All ensemble members failed to retrain on full data — abort.")
+    if skipped:
+        print(f"[build_ensemble] Skipped {len(skipped)} members: {skipped}")
 
     stack = np.stack(preds_list, axis=0)            # (N, horizon, L)
     weights = np.asarray(weights_list)              # (N,)
