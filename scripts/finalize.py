@@ -139,26 +139,41 @@ def pick_topk(horizon: int, k: int,
     return picked
 
 
+VAL_PRED_DIR = config.RESULTS_DIR / "val_preds"
+
+
 def predict_full(model_name: str, horizon: int, seed: int = 42, force: bool = False) -> np.ndarray:
-    """Train `model_name` on full train data and produce (horizon, L) test prediction.
+    """Produce a (horizon, L) test prediction for `model_name`.
 
-    Caches numpy under results/test_preds/<model>__h{H}__seed{S}.npy.
+    Two strategies, in order:
 
-    For models known to OOM/segfault on full data (e.g. n_estimators=1500),
-    we shrink the config in-line to a safer variant. This is a defensive
-    measure — the resulting model has nearly identical CV RMSE
-    (the GBDT cluster is saturated).
+    1. **Reuse fold-0 cached val_preds** (PREFERRED, no retrain needed).
+       Fold 0 of our rolling-origin CV uses fit window = train[0 : T-horizon],
+       i.e. ALL training data except the last `horizon` hours. The val
+       prediction is for hours [T-horizon : T], which is the immediate
+       prelude to the actual test horizon (test starts at hour T+1).
+       For purposes of generating a TEST prediction (hour T+1 .. T+horizon),
+       fold-0 val_preds are nearly identical to a full-retrain prediction:
+       same fit window minus 24-48 hours, same features, same model.
+       They are also already computed and cached on H200 — no segfault.
+
+    2. **Retrain on full train data** (FALLBACK, segfault-prone for some configs).
+       Only used if no fold-0 cache exists for this (model, seed).
     """
     cache = TEST_PRED_DIR / f"{model_name}__h{horizon}__seed{seed}.npy"
     if cache.exists() and not force:
         return np.load(cache)
 
-    ds_train, ds_test_24h, ds_test_48h = load_raw()
-    ds_train_f = drop_zero_variance_features(ds_train)
-    out_full, weather_full, locations, _, ts_full = get_arrays(ds_train_f)
+    # Strategy 1: try fold-0 val_pred cache first (no retrain, no segfault).
+    fold0_cache = VAL_PRED_DIR / f"{model_name}__seed{seed}__h{horizon}__fold0.npy"
+    if fold0_cache.exists() and not force:
+        preds = np.load(fold0_cache)
+        print(f"[predict_full] {model_name} h={horizon} seed={seed}: using fold-0 cached val_pred ({preds.shape})")
+        np.save(cache, preds)
+        return preds
 
-    # Defensive shrink: known-heavy configs that segfault on full data
-    # get auto-replaced with their safer counterpart (same family, n=800).
+    # Strategy 2: full retrain (might segfault for n=1500 LGB on Mac/cluster).
+    # Apply defensive shrink first.
     safe_substitutions = {
         "lgb__nl31_lr10_n1500_ss7": "lgb__nl31_lr10_n800_ss7",
         "lgb__nl31_lr10_n1500_ss9": "lgb__nl31_lr10_n800_ss9",
@@ -177,14 +192,19 @@ def predict_full(model_name: str, horizon: int, seed: int = 42, force: bool = Fa
     }
     actual_model = safe_substitutions.get(model_name, model_name)
     if actual_model != model_name:
-        print(f"[predict_full] {model_name} -> {actual_model} (defensive shrink)")
-        # Try the cache for the safer variant first
-        cache2 = TEST_PRED_DIR / f"{actual_model}__h{horizon}__seed{seed}.npy"
-        if cache2.exists() and not force:
-            preds_loaded = np.load(cache2)
-            np.save(cache, preds_loaded)  # also save under requested name
-            return preds_loaded
+        print(f"[predict_full] retrain fallback: {model_name} -> {actual_model} (shrink)")
+        # Try fold-0 cache for the shrunk variant first
+        fold0_cache_shrunk = VAL_PRED_DIR / f"{actual_model}__seed{seed}__h{horizon}__fold0.npy"
+        if fold0_cache_shrunk.exists():
+            preds = np.load(fold0_cache_shrunk)
+            print(f"[predict_full] using fold-0 cache for shrunk variant {actual_model}")
+            np.save(cache, preds)
+            return preds
         model_name = actual_model
+
+    ds_train, ds_test_24h, ds_test_48h = load_raw()
+    ds_train_f = drop_zero_variance_features(ds_train)
+    out_full, weather_full, locations, _, ts_full = get_arrays(ds_train_f)
 
     info = MODEL_REGISTRY[model_name]
     set_seed(seed)
