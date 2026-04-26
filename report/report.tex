@@ -95,7 +95,7 @@ implicit selection.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.85\linewidth]{../results/figures/statewide_outage.png}
+\includegraphics[width=0.85\linewidth]{figures/statewide_outage.png}
 \caption{State-wide hourly outage on a symmetric-log scale. Orange marks
 the 26 detected storm events; the red dashed line marks the
 2{,}000-outage threshold. The disproportionately large terminal event
@@ -106,15 +106,15 @@ ends precisely at the train/test boundary.}
 \begin{figure}[H]
 \centering
 \begin{subfigure}[b]{0.32\linewidth}
-\includegraphics[width=\linewidth]{../results/figures/outage_distribution.png}
+\includegraphics[width=\linewidth]{figures/outage_distribution.png}
 \caption{Outage value distributions.}\label{fig:dist}
 \end{subfigure}\hfill
 \begin{subfigure}[b]{0.32\linewidth}
-\includegraphics[width=\linewidth]{../results/figures/outage_autocorr.png}
+\includegraphics[width=\linewidth]{figures/outage_autocorr.png}
 \caption{Autocorrelation (7 days).}\label{fig:acf}
 \end{subfigure}\hfill
 \begin{subfigure}[b]{0.32\linewidth}
-\includegraphics[width=\linewidth]{../results/figures/county_heterogeneity.png}
+\includegraphics[width=\linewidth]{figures/county_heterogeneity.png}
 \caption{County heterogeneity.}\label{fig:het}
 \end{subfigure}
 \caption{The outage target is zero-inflated and heavy-tailed (a),
@@ -147,7 +147,7 @@ without a single extreme event dominating the score.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.85\linewidth]{../results/figures/cv_diagram.png}
+\includegraphics[width=0.85\linewidth]{figures/cv_diagram.png}
 \caption{Layout of the rolling-origin CV. Blue marks the
 expanding-window fit, red marks held-out validation, and orange marks
 the actual test held by the graders.}
@@ -277,7 +277,7 @@ elsewhere.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.78\linewidth]{../results/figures/cv_per_family_h24.png}
+\includegraphics[width=0.78\linewidth]{figures/cv_per_family_h24.png}
 \caption{Best configuration per family at the 24h horizon. Left:
 calm-period RMSE (typical day) --- the GBDT cluster lies near 41.5,
 while NNs lie at 53--110. Right: storm-fold RMSE (all families collapse
@@ -287,7 +287,7 @@ to 700--900).}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.7\linewidth]{../results/figures/cv_family_fold_h24.png}
+\includegraphics[width=0.7\linewidth]{figures/cv_family_fold_h24.png}
 \caption{Per-family $\times$ per-fold RMSE on the 24h horizon (best
 configuration of each family). The storm fold (right column) uses a
 separate scale. The anomalously low storm RMSE of
