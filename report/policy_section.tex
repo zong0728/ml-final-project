@@ -12,11 +12,21 @@ We greedily pick $c^\star_s = \arg\max_c M_s(c)$, deduct the served capacity fro
 Our recommendation is:
 
 \begin{quote}
-\verb|[ pending — run scripts.finalize ]|
+\verb|[26163, 26125, 26099, 26161, 26163]|
 \end{quote}
 
 \paragraph{Rationale (per-step marginal benefit).}
-[ rationale table pending ]
+\begin{tabular}{rlrrr}
+\toprule
+step & county & served-hh-hours & tracked\_max & remaining peak \\
+\midrule
+  1 & 26163.0 & 38870 & 922,425 & 1537 \\
+  2 & 26125.0 & 23896 & 618,124 & 853 \\
+  3 & 26099.0 & 14654 & 413,676 & 514 \\
+  4 & 26161.0 & 5916 & 174,449 & 240 \\
+  5 & 26163.0 & 2310 & 922,425 & 1537 \\
+\bottomrule
+\end{tabular}
 
 \paragraph{Limitations.}
 (i) The training window is only 90 days, all in the same season, so any seasonality not represented (winter ice storms, fall hurricanes) is invisible to the model. (ii) No future-weather information is available at test time, which fundamentally limits 48-hour predictability of fast-moving convective events. (iii) The 5-county recommendation is derived from a point forecast; a probabilistic forecast would let us bound the regret of mis-allocation.

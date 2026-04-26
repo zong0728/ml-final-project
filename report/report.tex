@@ -199,17 +199,36 @@ with a cap of two configs per family.
 \label{sec:results}
 
 \subsection{Headline: GBDT Ensembles Beat Both Required Baselines}
-Tables~\ref{tab:headline24}--\ref{tab:headline48} compare our best model
-to the all-zero baseline and SARIMAX(1,0,1) under four aggregation
-strategies. Improvement is consistent: \textbf{7--11\% over all-zero} and
-\textbf{2--6\% over SARIMAX} on the 24-hour horizon, and similarly on
-48h calm-period. Storm fold~1 contributes RMSE 700--900 for \emph{every}
-model evaluated --- including SARIMAX, all 100+ tree configurations, and
-all SOTA Transformer variants --- so its absolute contribution is large
-in unit terms but small in relative terms.
+Tables~\ref{tab:headline24}--\ref{tab:headline48} compare our best
+\emph{single} model to the all-zero baseline and SARIMAX(1,0,1) under
+four aggregation strategies. Improvement is consistent: \textbf{7--11\%
+over all-zero} and \textbf{2--6\% over SARIMAX} on the 24-hour horizon,
+and similarly on 48h calm-period. Storm fold~1 contributes RMSE 700--900
+for \emph{every} model evaluated --- including SARIMAX, all 100+ tree
+configurations, and all SOTA Transformer variants --- so its absolute
+contribution is large in unit terms but small in relative terms.
 
 \input{headline_h24.tex}
 \input{headline_h48.tex}
+
+\paragraph{Ensemble vs.\ single best.}
+Our submission is the equal-weight mean of the top-5 models per horizon
+(see \S\ref{sec:methods}.4). On the cached fold-level predictions, the
+24h ensemble achieves calm-period RMSE \textbf{41.17}, only 0.08 below
+the best single model (xgb\_pca20 at 41.25); the 48h ensemble lands at
+\textbf{44.37} vs.\ best single 44.54 ($\Delta\!=\!0.17$). The marginal
+improvement reflects high prediction correlation among GBDT variants:
+the ensemble's value lies in robustness against single-config failure
+(e.g., a particular hyperparameter combination overfitting one
+sub-region of the feature space) rather than RMSE reduction. Notably,
+on storm fold~1 the \emph{single best} model slightly out-performs the
+ensemble (24h: 840 vs 859; 48h: 715 vs 718), suggesting that averaging
+GBDT predictions does not help for OOD events --- the single model that
+happens to commit to the right magnitude wins, and averaging dilutes
+that commitment. We submit the ensemble nonetheless because (i) the
+project framing is single-fold-CSV-evaluation where calm-period
+behaviour dominates, and (ii) it follows the M4-competition consensus
+that ensemble averaging is the most robust forecasting practice [13].
 
 \subsection{Per-Family Comparison and Per-Fold Breakdown}
 Figure~\ref{fig:per_family} shows the best configuration of each model

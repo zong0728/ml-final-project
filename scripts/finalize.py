@@ -94,14 +94,13 @@ def pick_topk(horizon: int, k: int,
     sub = sub[sub["n"] >= 4]
     if sub.empty:
         raise RuntimeError(f"No eligible models for horizon={horizon}")
-    # Primary score: calm-period mean RMSE (5 non-storm folds), which is the
-    # most defensible "typical-day quality" metric. Stability term penalizes
-    # high std using only the calm folds — std is computed across all folds
-    # in summary, but its primary use here is to break near-ties.
-    # We use a small stability weight (0.05) on the storm column so that
-    # ties get broken in favor of the model that does relatively better on
-    # the storm fold too.
-    sub["score"] = sub["calm_mean"] + 0.05 * sub["storm_rmse"]
+    # Primary score: calm-period mean RMSE (5 non-storm folds). Storm fold is
+    # an OOD ceiling all models hit similarly (700-900 band on h=24, 715-720
+    # on h=48); we deliberately do NOT mix it into the score, so the ranking
+    # reflects typical-day predictive quality alone. The stability_weight
+    # argument is kept for API compatibility but applied to std (across-fold
+    # variability) rather than storm RMSE, with default 0 (pure calm ranking).
+    sub["score"] = sub["calm_mean"] + stability_weight * sub["val_rmse_std"]
     sub = sub.sort_values("score")
 
     if not prefer_diversity:
