@@ -1,4 +1,6 @@
 results/
+!results/figures/
+!results/figures/**
 notes/
 dataset/
 *.nc
