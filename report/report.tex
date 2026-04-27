@@ -39,14 +39,14 @@
 Grid resilience has moved up the priority list as climate-driven extreme
 weather grows more frequent. The April 2025 Pittsburgh windstorm left
 140{,}000 customers without power for over 24 hours, and Hurricanes
-Beryl and Milton each downed more than 3M Florida customers in
+Beryl and Milton each downed more than 3 million Florida customers in
 2024. Accurate short-horizon outage forecasts form the foundation of proactive utility response, enabling pre-positioning of repair crews and mobile generators ahead of anticipated disruptions rather than reacting afterward.
 
 We address two linked tasks using hourly county-level outage counts and
 109 atmospheric features across 83 Michigan counties over a 90-day
 window (2023-04-01 to 2023-06-30). The first is hourly outage
-forecasting at 24- and 48-hour horizons. The second is allocating five
-1{,}000-household mobile generators to the counties where they can mitigate the greatest level of outages over the test horizon.
+forecasting at 24 and 48-hour horizons. The second is allocating five
+1{,}000-household generators to the counties where they can mitigate the greatest level of outages over the test horizon.
 
 Two constraints shape the pipeline. First, no future weather information is available at test time; only outage history and weather observations up to the forecast origin are used as model inputs, reflecting real-world deployment conditions. Second, the training window ends mid-storm: the largest event of the year, peaking at 86,313 outages on 2023-06-29, begins on 2023-06-23 and continues through the end of training, so the test horizon begins within an unfolding storm. These constraints directly motivate
 our validation design (\S\ref{sec:cv}) and feature engineering
@@ -56,19 +56,18 @@ our validation design (\S\ref{sec:cv}) and feature engineering
 \label{sec:eda}
 
 \paragraph{Target distribution.}
-The outage matrix $\mathbf{Y}\in\mathbb{R}_{\ge 0}^{T\times L}$ is sparse and heavy-tailed, with 70.5\% of county-hour cells recording zero and the nonzero values following a log-normal-like tail (Fig.~\ref{fig:dist}). State-wide hourly outages range from 105 to 86{,}313, with the 99.5th percentile approximately ten times the median. Training with raw-scale MSE is therefore highly sensitive to a small number of extreme storm hours, motivating the use of a log-transformed target and the reporting of RMSE averaged across counties rather than pooled.
+The outage matrix $\mathbf{Y}\in\mathbb{R}_{\ge 0}^{T\times L}$ is sparse and heavy-tailed, with 70.5\% of county-hour cells recording zero and the nonzero values following a log-normal-like tail (Fig.~\ref{fig:dist}). State-wide hourly outages range from 105 to 86{,}313, with the 99.5th percentile approximately ten times the median. Training with raw-scale MSE is therefore highly sensitive to a small number of extreme storm hours, motivating the use of a log-transformed target and the reporting of a county-averaged RMSE.
 
 \paragraph{Storm structure.}
-Outages are concentrated in a small number of discrete events rather than being uniformly distributed over time (Fig.~\ref{fig:state}). Using a state-wide threshold of 2{,}000 simultaneous outages with a 6-hour minimum duration and a 12-hour merge gap, we identify 26 storm events within the 90-day window (Fig.~\ref{fig:state}). The terminal event (id~25, 2023-06-23 to 06-30) peaks at 86{,}313, more than three times the second-largest at 27{,}643, and training period ends within this event.
+Outages are concentrated in a small number of discrete events rather than being uniformly distributed over time. Using a state-wide threshold of 2{,}000 simultaneous outages with a 6-hour minimum duration and a 12-hour merge gap, we identify 26 storm events within the 90-day window (Fig.~\ref{fig:state}). The terminal event (2023-06-23 to 06-30) peaks at 86{,}313, more than three times the second-largest at 27{,}643, and training ends inside it. A single holdout window at the end of training would therefore yield a one-sample estimate dominated by this outlier, motivating the rolling-origin cross-validation design in \S\ref{sec:cv}.
 
 \paragraph{Autocorrelation.}
-The state-wide series exhibits a strong diurnal echo at lag 24h and a
+The state-wide series exhibits a strong diurnal pattern at lag 24h and a
 weaker weekly echo at lag 168h (Fig.~\ref{fig:acf}), suggesting that
 lagged outage values are likely to dominate prediction, with weather features playing a secondary role.
 
 \paragraph{County-level heterogeneity.}
-Per-county \texttt{tracked} values range from approximately 5{,}000 to 920{,}000, and storm impacts do not scale proportionally with size (Fig.~\ref{fig:het}). Wayne County (FIPS 26163) tracks 922k households yet records only the third-largest peak outage in the state, while smaller counties such as Saginaw (97k tracked) experience peaks of 8.7k outages, roughly 9\% of its household base. This pattern motivates the marginal-benefit allocation in \S\ref{sec:policy} rather than a simple top-$N$ ranking.
-
+Per-county \texttt{tracked} values range from approximately 5{,}000 to 920{,}000, and storm impacts do not scale proportionally with size (Fig.~\ref{fig:het}). Wayne County (FIPS 26163) tracks 922{,}000 households yet records only the third-largest peak outage in the state, while smaller counties such as Saginaw (97{,}000 tracked) experience peaks of 8{,}700 outages, roughly 9\% of its household base. This pattern motivates the marginal-benefit allocation in \S\ref{sec:policy} rather than a simple top-$N$ ranking.
 
 \paragraph{Weather features.}
 Of the 109 atmospheric variables, 18 are constant over the training period and are therefore dropped, leaving 91 non-zero-variance features. The 15 most correlated with state-wide outages are all moisture- and wind-related, including \texttt{cape}, low-level $u/v$ winds, precipitable water, and storm-motion magnitude (\texttt{vstm}). We retain all 91 features and rely on tree-based models to perform implicit feature selection.
@@ -109,11 +108,11 @@ of magnitude (c).}
 \subsection{Validation: Rolling-Origin Cross-Validation}
 \label{sec:cv}
 
-A naive last-48h holdout falls within the largest storm of the year, so any single-window validation RMSE constitutes a sample of one. We therefore replace it with rolling-origin cross-validation (Fig.~\ref{fig:cv_diag}) consisting of 6 folds spaced 72 hours apart. 
+\paragraph{Motivation.} A naive last-48h holdout falls within the largest storm of the year, so any single-window validation RMSE constitutes a sample of one. We therefore replace it with rolling-origin cross-validation (Fig.~\ref{fig:cv_diag}) consisting of 6 folds spaced 72 hours apart. 
 
-The validation window of each fold is the forecast horizon (24 or 48 hours) immediately following its fit window, in exact correspondence with the production setup. The fit windows expand incrementally: each fold uses all data from 2023-04-01 to its origin, so the fit set of fold 0 coincides with the final retrain on the full training data, which makes its RMSE the most direct estimate of test performance [4]. No weather observation inside any validation window is visible to its model fitted on that fold. The folds span 2023-06-13 to 06-29, and exactly one of them (fold 1) lands within the peak of the major storm. 
+\paragraph{Fold Construction.} The validation window of each fold is the forecast horizon (24 or 48 hours) immediately following its fit window, in exact correspondence with the production setup. The fit windows expand incrementally: each fold uses all data from 2023-04-01 to its origin, so the fit set of fold 0 coincides with the final retrain on the full training data, which makes its RMSE the most direct estimate of test performance [4]. No weather observation inside any validation window is visible to its model fitted on that fold. The folds span 2023-06-13 to 06-29, and exactly one of them (fold 1) lands within the peak of the major storm. 
 
-We report both the aggregate-mean RMSE and the calm-period mean RMSE: the former captures cross-period performance, including the OOD storm, while the latter captures typical-day quality without a single extreme event dominating the score.
+\paragraph{Reported Metrics.}We report both the aggregate-mean RMSE and the calm-period mean RMSE: the former captures cross-period performance, including the OOD storm, while the latter captures typical-day quality without a single extreme event dominating the score.
 
 \begin{figure}[H]
 \centering
@@ -127,31 +126,35 @@ the actual test held by the graders.}
 \subsection{Feature Engineering}
 \label{sec:features}
 
+\paragraph{Feature Matrix Construction.}
 For tree-based models, we materialize an $(N\times P)$ feature matrix in which each row corresponds to one (origin time, county, horizon-step) triplet. All features are leak-free in that they use only data available up to time $t$.
 
+\paragraph{Feature Categories.}
 Outage lags $y_{c,t-k}$ are computed for $k\in\{1,2,3,6,12,24,48,168\}$, and we add the rolling mean and standard deviation of outage over windows of 6, 24, and 168 hours. The storm indicators include the 24h maximum, the 24h non-zero count, and the 24h day-over-day delta. Weather features enter both at $t$ and at lags of 3, 12, and 24 hours. The calendar encodings (sin/cos of hour, day-of-week, and month) are evaluated at the target time $t{+}h$. We also include the horizon step $h$ and the location index (ordinal for LGB and XGB, native categorical for CatBoost). The final feature dimension is approximately 389. 
 
+\paragraph{Extended Feature Set and PCA.}
 We additionally evaluated an enlarged v2 feature set (deep lags up to 672h, state-aggregated lags, county metadata, and weather rolling means; $P\!\approx\!773$), but its performance was within noise of the shorter set (\S\ref{sec:negative}). We considered applying PCA to the 109 weather features but did not adopt it for the headline pipeline. GBDT models perform implicit feature selection through information-gain splits. A linear orthogonal basis would therefore forfeit the per-feature interpretability provided by gain-based importances without delivering a measurable RMSE reduction. We confirmed this empirically: gain-based feature importance in LightGBM assigns 92\% of the total gain to only 23 weather features out of 91, which suggests that the model already exploits a sparse subset.
 
 \subsection{Model Families}
 
 \paragraph{Baselines.}
-
 The naive baselines comprise an all-zero predictor, persistence ($\hat y_{t+h}\!=\!y_t$), seasonal-naive predictors at 24h and 168h, and a per-(county, hour, day-of-week) historical mean. The classical time-series baselines are per-county SARIMAX(1,0,1), the second mandatory baseline of the project, and AutoARIMA over $(p,d,q)$. 
 
-\paragraph{Tabular GBDT Pool and Sequence Neural Networks.}
-
+\paragraph{Tabular GBDT Pool.}
 The tabular GBDT pool covers LightGBM~[1] (with a log target), LGB-Tweedie~[5], XGBoost~[2], CatBoost~[3] with native categorical handling of FIPS, and Quantile-LGB at $\alpha\!\in\!\{0.5,0.9\}$. We also evaluate a hurdle (zero-inflated) decomposition~[6], formed by a classifier $\Pr[y\!>\!0]$ multiplied by a positive-only regressor, as well as per-county models in which 83 independent regressors are fitted (LGB, XGB, CatBoost). 
 
+\paragraph{Sequence Neural Networks.}
 The pool of sequence neural networks covers GRU, LSTM, BiLSTM, TCN, MLP, the vanilla Transformer, NLinear and DLinear~[7], PatchTST~[8], iTransformer~[9], N-BEATS~[10], and N-HiTS~[11]. 
 
-We submit equal-weight ensembles of the top-$k$ CV models. Learned stacking weights are not used, as they would overfit the single-fold storm signal.
+We submit an equal-weight mean ensemble of the top-5 CV models per horizon. Learned stacking weights are not used, since they would over-fit the single-fold storm signal.
 
 \subsection{Hyperparameter Search and Ensemble Selection}
 
+\paragraph{Search Protocol.}
 We conducted hyperparameter sweeps on a CMU DeltaAI cluster (NVIDIA H200), which yielded approximately 3{,}800 (model, seed, horizon, fold) cells in total. The LightGBM grid contributed 54 configurations over leaves~$\in\{31,63,127\}$, lr~$\in\{0.03,0.05,0.1\}$, $n\in\{400,800,1500\}$, and subsample~$\in\{0.7,0.9\}$. LGB-Tweedie added 24 configurations with variance\_power $\in\{1.2,1.5,1.8\}$; XGBoost contributed 18 and CatBoost a further 18. Each of the 12 NN architectures was evaluated with 8 hyperparameter combinations and 2 random seeds. Eight further configurations (AutoARIMA, Quantile-LGB, hurdle-LGB and hurdle-XGB, and per-county models) round out the pool. 
 
-For ensembling, we compare four combination strategies (mean, median, trimmed mean, and inverse-RMSE-weighted) on the cached fold predictions and select the strategy with the lowest RMSE for each horizon. Top-$k$ selection ranks models by calm-period mean RMSE, with a cap of two configurations per family, so that the ensemble is not dominated by near-duplicates from a single tuning sweep.
+\paragraph{Ensemble Construction.}
+For ensembling, we compare four combination strategies (mean, median, trimmed mean, and inverse-RMSE-weighted) on the cached fold predictions and select the strategy with the lowest RMSE for each horizon. Top-5 selection ranks models by calm-period mean RMSE, with a cap of two configurations per family, so that the ensemble is not dominated by near-duplicates from a single tuning sweep.
 
 \section{Results}
 \label{sec:results}
@@ -171,12 +174,16 @@ absolute contribution is large in unit terms but small in relative terms.
 
 \paragraph{Ensemble vs.\ single best.}
 The submission consists of the equal-weight mean of the top-5 models
-per horizon (see \S\ref{sec:methods}.4). On the cached fold-level
-predictions, the 24h ensemble achieves a calm-period RMSE of 41.17,
-only 0.08 below the best single model (xgb\_pca20 at 41.25); the 48h
-ensemble lands at 44.37 against 44.54 for the best single model
-($\Delta\!=\!0.17$). The marginal improvement reflects the high
-prediction correlation among GBDT variants, so the value of the
+per horizon (see \S\ref{sec:methods}.4). The 24h ensemble combines
+\texttt{xgb\_pca20}, \texttt{cat\_v2}, \texttt{lgb\_pca20},
+\texttt{cat\_d8\_lr03\_n400}, and \texttt{lgb\_quantile\_p50}; the 48h
+ensemble combines \texttt{lgb\_pca30}, \texttt{xgb\_pca20},
+\texttt{lgb\_pca20}, \texttt{cat\_v2}, and \texttt{cat\_pca20}. On the
+cached fold-level predictions, the 24h ensemble achieves a calm-period
+RMSE of 41.17, only 0.08 below the best single model (\texttt{xgb\_pca20}
+at 41.25); the 48h ensemble lands at 44.37 against 44.54 for the best
+single model ($\Delta\!=\!0.17$). The marginal improvement reflects the
+high prediction correlation among GBDT variants, so the value of the
 ensemble lies in robustness against single-configuration failure (for
 example, a particular hyperparameter combination that overfits one
 sub-region of the feature space) rather than in raw RMSE reduction. On
@@ -209,27 +216,6 @@ consistently lose 10--30 RMSE on calm folds; fold 0 (the fold
 immediately adjacent to the test horizon) is the most difficult calm
 fold across all families, with RMSE in the 70--90 range against 19--44
 elsewhere.
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.78\linewidth]{figures/cv_per_family_h24.png}
-\caption{Best configuration per family at the 24h horizon. Left:
-calm-period RMSE (typical day) --- the GBDT cluster lies near 41.5,
-while NNs lie at 53--110. Right: storm-fold RMSE (all families collapse
-to 700--900).}
-\label{fig:per_family}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.7\linewidth]{figures/cv_family_fold_h24.png}
-\caption{Per-family $\times$ per-fold RMSE on the 24h horizon (best
-configuration of each family). The storm fold (right column) uses a
-separate scale. The anomalously low storm RMSE of
-\texttt{persistence} (660) reflects accidental alignment with storm
-continuation rather than predictive skill.}
-\label{fig:family_fold}
-\end{figure}
 
 \input{cv_table_h24.tex}
 \input{cv_table_h48.tex}
@@ -337,6 +323,32 @@ in our pool.
 [10] Oreshkin et al., N-BEATS, ICLR 2020. \\{}
 [11] Challu et al., NHITS, AAAI 2023. \\{}
 [12] Nemhauser et al., Submodular Set-Function Approximations, Math.\ Prog.\ 1978. \\{}
-[13] Makridakis et al., M4 Competition, Int.\ J.\ Forecasting 2018.nt.\ J.\ Forecasting 2018.
+[13] Makridakis et al., M4 Competition, Int.\ J.\ Forecasting 2018.
+
+\newpage
+\appendix
+\counterwithin{figure}{section}
+\section{Appendix}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.78\linewidth]{figures/cv_per_family_h24.png}
+\caption{Best configuration per family at the 24h horizon. Left:
+calm-period RMSE (typical day) --- the GBDT cluster lies near 41.5,
+while NNs lie at 53--110. Right: storm-fold RMSE (all families collapse
+to 700--900).}
+\label{fig:per_family}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\linewidth]{figures/cv_family_fold_h24.png}
+\caption{Per-family $\times$ per-fold RMSE on the 24h horizon (best
+configuration of each family). The storm fold (right column) uses a
+separate scale. The anomalously low storm RMSE of
+\texttt{persistence} (660) reflects accidental alignment with storm
+continuation rather than predictive skill.}
+\label{fig:family_fold}
+\end{figure}
 
 \end{document}
