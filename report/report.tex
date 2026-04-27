@@ -298,11 +298,14 @@ member, the first three counties are picked unanimously, and counties
 4 and 5 vary only marginally. Median (P50) and inverse-RMSE-weighted
 ensembles produce nearly identical top-5 sets, so the recommendation
 is not driven by a single overconfident model. A swap-one analysis
-quantifies the same point: replacing slot~2 (Oakland) with the
-next-best alternative would lose $\approx$22k served-household-hours
-and replacing slot~3 (Macomb) would lose $\approx$13k, while
-replacing either of the two Wayne slots costs $\le$300, so the binding
-picks are 2--3 and the trailing slot is essentially flat.
+quantifies this: the next-best alternative across all slots is FIPS
+26115 (Monroe); replacing slot~2 (Oakland) with Monroe loses
+$\approx$22k served-hh-hours, slot~3 (Macomb) $\approx$13k, while
+either Wayne slot costs $\le$300. Wayne's step-1 marginal (38.9k) is
+$1.6\times$ Oakland's (23.9k), so it remains top-1 under uniform
+downscaling up to $\approx$38\%: the ranking is robust to
+prediction-scale error even though the absolute served-hh-hours is
+not.
 
 Decision risk against the real outcome. The recommendation will be
 evaluated against the actual outage record from 2023-06-30 to 07-02.
@@ -323,30 +326,28 @@ Limitations. The training data span 90 days within a single
 spring-to-summer window, so the model has not seen winter ice storms
 or fall hurricane remnants, which makes year-on-year retraining
 essential in deployment. The absence of future-weather information
-caps the 48h predictability of fast convective events; the integration
-of an NWP forecast at inference time would substantially improve both
+caps the 48h predictability of fast convective events; integrating an
+NWP forecast at inference time would substantially improve both
 prediction and policy quality, but it falls outside the framing of
-this project. Finally, the recommendation is derived from a point
-forecast, and for richer products such as uncertainty bands or
-regret-aware allocation, the Quantile-LGB-$P_{90}$ member is available
-in our pool.
+this project.
 
 \section*{References}
 \footnotesize
+\setlength{\parskip}{2pt}
 \noindent
-[1] Ke et al., LightGBM, NeurIPS 2017. \\{}
-[2] Chen \& Guestrin, XGBoost, KDD 2016. \\{}
-[3] Prokhorenkova et al., CatBoost, NeurIPS 2018. \\{}
-[4] Hyndman \& Athanasopoulos, \emph{Forecasting: Principles and Practice}, 3rd ed. \\{}
-[5] J\o{}rgensen, Exponential Dispersion Models, JRSS-B 1987 (Tweedie). \\{}
-[6] Cragg, Some Stat.\ Models for Limited Dep.\ Vars, Econometrica 1971 (hurdle). \\{}
-[7] Zeng et al., \emph{Are Transformers Effective for Time Series Forecasting?}, AAAI 2023. \\{}
-[8] Nie et al., PatchTST, ICLR 2023. \\{}
-[9] Liu et al., iTransformer, ICLR 2024. \\{}
-[10] Oreshkin et al., N-BEATS, ICLR 2020. \\{}
-[11] Challu et al., NHITS, AAAI 2023. \\{}
-[12] Nemhauser et al., Submodular Set-Function Approximations, Math.\ Prog.\ 1978. \\{}
-[13] Makridakis et al., M4 Competition, Int.\ J.\ Forecasting 2018.
+[1] Ke, G., Meng, Q., Finley, T., Wang, T., Chen, W., Ma, W., Ye, Q., \& Liu, T.-Y. (2017). LightGBM: A highly efficient gradient boosting decision tree. \emph{Advances in Neural Information Processing Systems, 30}, 3146--3154. \\{}
+[2] Chen, T., \& Guestrin, C. (2016). XGBoost: A scalable tree boosting system. In \emph{Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining} (pp.~785--794). \\{}
+[3] Prokhorenkova, L., Gusev, G., Vorobev, A., Dorogush, A.~V., \& Gulin, A. (2018). CatBoost: Unbiased boosting with categorical features. \emph{Advances in Neural Information Processing Systems, 31}, 6638--6648. \\{}
+[4] Hyndman, R.~J., \& Athanasopoulos, G. (2021). \emph{Forecasting: Principles and practice} (3rd~ed.). OTexts. \\{}
+[5] J\o{}rgensen, B. (1987). Exponential dispersion models. \emph{Journal of the Royal Statistical Society: Series B, 49}(2), 127--162. \\{}
+[6] Cragg, J.~G. (1971). Some statistical models for limited dependent variables with application to the demand for durable goods. \emph{Econometrica, 39}(5), 829--844. \\{}
+[7] Zeng, A., Chen, M., Zhang, L., \& Xu, Q. (2023). Are Transformers effective for time series forecasting? \emph{Proceedings of the AAAI Conference on Artificial Intelligence, 37}(9), 11121--11128. \\{}
+[8] Nie, Y., Nguyen, N.~H., Sinthong, P., \& Kalagnanam, J. (2023). A time series is worth 64 words: Long-term forecasting with Transformers. In \emph{International Conference on Learning Representations}. \\{}
+[9] Liu, Y., Hu, T., Zhang, H., Wu, H., Wang, S., Ma, L., \& Long, M. (2024). iTransformer: Inverted Transformers are effective for time series forecasting. In \emph{International Conference on Learning Representations}. \\{}
+[10] Oreshkin, B.~N., Carpov, D., Chapados, N., \& Bengio, Y. (2020). N-BEATS: Neural basis expansion analysis for interpretable time series forecasting. In \emph{International Conference on Learning Representations}. \\{}
+[11] Challu, C., Olivares, K.~G., Oreshkin, B.~N., Garza, F., Mergenthaler-Canseco, M., \& Dubrawski, A. (2023). N-HiTS: Neural hierarchical interpolation for time series forecasting. \emph{Proceedings of the AAAI Conference on Artificial Intelligence, 37}(6), 6989--6997. \\{}
+[12] Nemhauser, G.~L., Wolsey, L.~A., \& Fisher, M.~L. (1978). An analysis of approximations for maximizing submodular set functions---I. \emph{Mathematical Programming, 14}(1), 265--294. \\{}
+[13] Makridakis, S., Spiliotis, E., \& Assimakopoulos, V. (2018). The M4 Competition: Results, findings, conclusion and way forward. \emph{International Journal of Forecasting, 34}(4), 802--808.
 
 \newpage
 \appendix
