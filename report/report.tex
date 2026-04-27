@@ -21,7 +21,7 @@
 \vspace{0.5em}
 \Large 95-828 Machine Learning for Problem Solving --- Spring 2026}
 \author{
-  Shengzong Guan \\ \texttt{shengzhg@andrew.cmu.edu}
+  Shengzhong Guan \\ \texttt{shengzhg@andrew.cmu.edu}
   \and
   Xinyin Zhang \\ \texttt{xinyinzh@andrew.cmu.edu}
   \and
@@ -48,7 +48,7 @@ window (2023-04-01 to 2023-06-30). The first is hourly outage
 forecasting at 24- and 48-hour horizons. The second is allocating five
 1{,}000-household mobile generators to the counties where they can mitigate the greatest level of outages over the test horizon.
 
-Two constraints shape the pipeline. First, no future weather information is available at test time; only outage history and weather observations up to the forecast origin are used as model inputs, reflecting real-world deployment conditions. Second, the training window ends mid-storm: the largest event of the year, peaking at 86,313 outages on 2023-06-29, begins on 2023-06-23 and continues through the end of training, so the test horizon begins within an unfolding storm. These constraints directly motivate
+Two constraints shape the pipeline. First, no future weather information is available at test time; only outage history and weather observations up to the forecast origin are used as model inputs, reflecting real-world deployment conditions. Second, the training window ends mid-storm: the largest event of the year, peaking at 86,313 outages on 2023-06-26, begins on 2023-06-23 and continues through the end of training, so the test horizon begins within an unfolding storm. These constraints directly motivate
 our validation design (\S\ref{sec:cv}) and feature engineering
 (\S\ref{sec:features}).
 
@@ -129,7 +129,7 @@ the actual test held by the graders.}
 
 For tree-based models, we materialize an $(N\times P)$ feature matrix in which each row corresponds to one (origin time, county, horizon-step) triplet. All features are leak-free in that they use only data available up to time $t$.
 
-Outage lags $y_{c,t-k}$ are computed for $k\in\{1,2,3,6,12,24,48,168\}$, and we add the rolling mean and standard deviation of outage over windows of 6, 24, and 168 hours. The storm indicators include the 24h maximum, the 24h non-zero count, and the 24h day-over-day delta. Weather features enter both at $t$ and at lags of 3, 12, and 24 hours. The calendar encodings (sin/cos of hour, day-of-week, and month) are evaluated at the target time $t{+}h$. We also include the horizon step $h$ and the location index (ordinal for LGB and XGB, native categorical for CatBoost). The final feature dimension is approximately 389. 
+Outage lags $y_{c,t-k}$ are computed for $k\in\{1,2,3,6,12,24,48,168\}$, and we add the rolling mean and standard deviation of outage over windows of 6, 24, and 168 hours. The storm indicators include the 24h maximum, the 24h non-zero count, and the 24h day-over-day delta. Weather features enter both at $t$ and at lags of 3, 12, and 24 hours. The calendar encodings (sin/cos of hour, day-of-week, and month) are evaluated at the target time $t{+}h$ (legitimately so, as the calendar is deterministic given the timestamp). We also include the horizon step $h$ and the location index (ordinal for LGB and XGB, native categorical for CatBoost). The final feature dimension is approximately 389. 
 
 We additionally evaluated an enlarged v2 feature set (deep lags up to 672h, state-aggregated lags, county metadata, and weather rolling means; $P\!\approx\!773$), but its performance was within noise of the shorter set (\S\ref{sec:negative}). We considered applying PCA to the 109 weather features but did not adopt it for the headline pipeline. GBDT models perform implicit feature selection through information-gain splits. A linear orthogonal basis would therefore forfeit the per-feature interpretability provided by gain-based importances without delivering a measurable RMSE reduction. We confirmed this empirically: gain-based feature importance in LightGBM assigns 92\% of the total gain to only 23 weather features out of 91, which suggests that the model already exploits a sparse subset.
 
@@ -159,12 +159,17 @@ For ensembling, we compare four combination strategies (mean, median, trimmed me
 \subsection{Headline: GBDT Ensembles Beat Both Required Baselines}
 Tables~\ref{tab:headline24}--\ref{tab:headline48} compare the best
 single model to the all-zero baseline and to SARIMAX(1,0,1) under four
-aggregation strategies. The improvement is consistent at 7--11\% over
-all-zero and 2--6\% over SARIMAX on the 24-hour horizon, with similar
-margins on the 48h calm-period score. Storm fold 1 contributes RMSE in
-the 700--900 range for every model evaluated, including SARIMAX, all
-100+ tree configurations, and all SOTA Transformer variants, so its
-absolute contribution is large in unit terms but small in relative terms.
+aggregation strategies. On the 24-hour horizon the improvement is
+7.5--8.3\% over all-zero and 2.7--4.1\% over SARIMAX across the four
+aggregation views, with similar margins on the 48h calm-period score
+(8.2\% and 3.3\% respectively). On the 48h horizon SARIMAX matches our
+best single model on the storm fold ($-0.2\%$) and on the median view
+($-0.5\%$); we attribute this to the dominance of fold~1's storm-period
+error in those aggregations and to the strength of SARIMAX's
+autoregressive structure under heavy-tail extrapolation. Storm fold 1
+contributes RMSE in the 700--900 range for SARIMAX, all 100+ tree
+configurations, and all SOTA Transformer variants, so its absolute
+contribution is large in unit terms but small in relative terms.
 
 \input{headline_h24.tex}
 \input{headline_h48.tex}
@@ -180,15 +185,18 @@ prediction correlation among GBDT variants, so the value of the
 ensemble lies in robustness against single-configuration failure (for
 example, a particular hyperparameter combination that overfits one
 sub-region of the feature space) rather than in raw RMSE reduction. On
-storm fold 1, the best single model slightly outperforms the ensemble
-(24h: 840 vs.\ 859; 48h: 715 vs.\ 718), which suggests that averaging
-GBDT predictions does not help for OOD events: the single model that
-happens to commit to the correct magnitude wins, and averaging dilutes
-that commitment. We submit the ensemble nonetheless, partly because the
-project framing is a single-fold-CSV evaluation in which calm-period
-behaviour dominates, and partly because the choice follows the
-M4-competition consensus that ensemble averaging is the most robust
-forecasting practice [13].
+storm fold 1 the calm-best single model and the ensemble are
+essentially indistinguishable (24h: \texttt{xgb\_pca20} 844 vs.\
+ensemble 859; 48h: \texttt{lgb\_pca30} 718 vs.\ ensemble 718). The
+lowest storm-fold RMSE among all single models --- 778 at 24h
+(\texttt{lgb\_nl127}) and 715 at 48h (\texttt{xgb\_v2}) --- is achieved
+by configurations that are not the calm-best, which suggests that
+picking a single model on calm-period validation provides no advantage
+on out-of-distribution events. We submit the ensemble nonetheless,
+partly because the project framing is a single-fold-CSV evaluation in
+which calm-period behaviour dominates, and partly because the choice
+follows the M4-competition consensus that ensemble averaging is the
+most robust forecasting practice [13].
 
 \subsection{Per-Family Comparison and Per-Fold Breakdown}
 Figure~\ref{fig:per_family} reports the best configuration of each
@@ -238,7 +246,7 @@ continuation rather than predictive skill.}
 \label{sec:negative}
 Several priors did not move the CV RMSE below the GBDT cluster.
 Doubling the feature count (the v2 set) was within noise of the
-390-feature baseline. Direct MSE, Huber, and sample-weighted objectives
+389-feature baseline. Direct MSE, Huber, and sample-weighted objectives
 on the raw outage scale degraded fold-0 calm RMSE from 71 to 73--146,
 which reflects the heavy-tail sensitivity to log-space training. A
 recursive (autoregressive) one-step rollout accumulated error through
@@ -248,7 +256,12 @@ formulation that we adopted. None of the NN architectures we tried
 iTransformer, N-BEATS, and N-HiTS) closed the 10+ RMSE gap with GBDT
 on calm folds. A diagnostic per-county decomposition reveals that 50\%
 of the fold-0 RMSE is concentrated in Wayne County alone, where the
-truth peaks at 2{,}648 against a prediction of 536. This
+truth peaks at 2{,}648 against a prediction of 536. Two effects
+compound: Wayne's 922k tracked households are roughly $1.5\times$ the
+next-largest county, so the same residual outage produces a much
+larger squared error; and Wayne is the only large-tracked county still
+in storm-tail decay during fold~0, while the other top-5 counties have
+returned to their calm baseline (peak~$\le$~350). This
 unfolding-storm underestimation persists across every variant tested,
 and we therefore interpret RMSE 41--42 as the achievable lower bound
 for this dataset under the no-future-weather constraint.
@@ -286,14 +299,25 @@ outage; the per-hour cap $\min(\hat y, 1000)$ inside $M_s$ corrects
 this. A one-generator-per-county rule forbids stacking, whereas the
 greedy algorithm correctly places multiple generators where the
 predicted demand is well above 1{,}000 per hour, which the project
-description explicitly permits.
+description explicitly permits. Quantitatively, our greedy allocation
+absorbs $\approx$85.6k served-household-hours over the 48h horizon,
+versus 80.1k for top-5-by-tracked ($-6.5\%$), 83.7k for
+top-5-by-historical-peak ($-2.2\%$), and 85.4k for both the
+predicted-sum and one-per-county heuristics ($-0.3\%$). The remaining
+gap to the no-stacking heuristic isolates the value of the second
+Wayne generator.
 
 \subsection{Sensitivity, Robustness, and Decision Risk}
 Selection robustness. When the top-5 are re-derived from each ensemble
 member, the first three counties are picked unanimously, and counties
 4 and 5 vary only marginally. Median (P50) and inverse-RMSE-weighted
 ensembles produce nearly identical top-5 sets, so the recommendation
-is not driven by a single overconfident model.
+is not driven by a single overconfident model. A swap-one analysis
+quantifies the same point: replacing slot~2 (Oakland) with the
+next-best alternative would lose $\approx$22k served-household-hours
+and replacing slot~3 (Macomb) would lose $\approx$13k, while
+replacing either of the two Wayne slots costs $\le$300, so the binding
+picks are 2--3 and the trailing slot is essentially flat.
 
 Decision risk against the real outcome. The recommendation will be
 evaluated against the actual outage record from 2023-06-30 to 07-02.
