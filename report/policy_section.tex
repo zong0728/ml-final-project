@@ -1,9 +1,9 @@
-We use the equal-weight ensemble's 48-hour test forecast to drive a greedy allocation of the 5 backup generators. The marginal benefit of placing one generator in county $c$ at decision step $s$ is the integral, across the 48-hour horizon, of the un-served outage that one generator (capacity 1{,}000 households) can absorb:
+We use the equal-weight ensemble's 48-hour (rather than 24-hour) test forecast to drive the allocation, because each generator is staged once and cannot be relocated during the event window: optimising over the full 48 hours guards against a peak that lands on the second day, which a 24-hour-only objective would miss. The marginal benefit of placing one generator in county $c$ at decision step $s$ is the integral, across the 48-hour horizon, of the un-served outage that one generator (capacity 1{,}000 households) can absorb:
 
 \[
-M_s(c) = \sum_{h=1}^{48} \min\!\bigl( \hat y_{c,t+h} - {\rm consumed}_{s-1}(c,h),\ 1000,\ {\rm tracked\_max}(c) \bigr).
+M_s(c) = \sum_{h=1}^{48} \min\!\bigl( \max(\hat y_{c,t+h} - {\rm consumed}_{s-1}(c,h),\ 0),\ 1000,\ {\rm tracked\_max}(c) \bigr).
 \]
-The per-hour cap at 1{,}000 is what gives the algorithm its \emph{diminishing returns}: once a generator is placed in county $c$, subsequent generators contribute strictly less because the previously consumed capacity is subtracted. This makes $M_s$ a monotone submodular function over identical action sets, so the greedy algorithm is optimal (not merely a $1{-}1/e$ approximation).
+The inner $\max(\cdot,0)$ clamps the residual outage so that an over-provisioned hour cannot create negative marginal benefit. The per-hour cap at 1{,}000 is what gives the algorithm its \emph{diminishing returns}: once a generator is placed in county $c$, subsequent generators contribute strictly less because the previously consumed capacity is subtracted. With $k$ identical actions and per-county concave utility, this greedy resource allocation is exact-optimal --- a stronger guarantee than the generic $1{-}1/e$ bound for monotone submodular maximisation.
 
 A secondary cap at $\text{tracked\_max}(c)$ is included as a defensive guard for two future scenarios: (i) deployment to jurisdictions smaller than 1{,}000 households, and (ii) prediction pathologies where $\hat y_c$ exceeds the county's actual household count. Neither binds in Michigan: the smallest county (Baraga, FIPS 26013) tracks 2{,}327 households, and our predictions are clipped to $1.5\times$ the historical max in any case. We retain the cap for code generality.
 
