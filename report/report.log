@@ -1,9 +1,9 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2025.1.22)  26 APR 2026 22:04
+This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2025.1.22)  26 APR 2026 22:11
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
-**report.tex
-(./report.tex
+**report/report.tex
+(./report/report.tex
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-02-20>
 (/usr/local/texlive/2024/texmf-dist/tex/latex/base/article.cls
@@ -387,7 +387,7 @@ File: l3backend-pdftex.def 2024-02-20 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count302
 \l__pdf_internal_box=\box58
 )
-(./report.aux)
+(report/report.aux)
 \openout1 = `report.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 34.
@@ -471,7 +471,7 @@ Package caption Info: hyperref package is loaded.
 Package caption Info: End \AtBeginDocument code.
 Package hyperref Info: Link coloring OFF on input line 34.
 
-(./report.out) (./report.out)
+(report/report.out) (report/report.out)
 \@outlinefile=\write3
 \openout3 = `report.out'.
 
@@ -544,16 +544,18 @@ File: figures/county_heterogeneity.png Graphic file (type png)
 Package pdftex.def Info: figures/county_heterogeneity.png  used on input line 9
 6.
 (pdftex.def)             Requested size: 150.32504pt x 93.94878pt.
- [2 <./figures/statewide_outage.png> <./figures/outage_distribution.png> <./fig
-ures/outage_autocorr.png> <./figures/county_heterogeneity.png>]
+ [2 <report/figures/statewide_outage.png> <report/figures/outage_distribution.p
+ng> <report/figures/outage_autocorr.png> <report/figures/county_heterogeneity.p
+ng>]
 <figures/cv_diagram.png, id=113, 794.97pt x 303.534pt>
 File: figures/cv_diagram.png Graphic file (type png)
 <use figures/cv_diagram.png>
 Package pdftex.def Info: figures/cv_diagram.png  used on input line 119.
 (pdftex.def)             Requested size: 399.29463pt x 152.46135pt.
- [3 <./figures/cv_diagram.png>]
-(./headline_h24.tex) (./headline_h48.tex) [4] (./cv_table_h24.tex)
-(./cv_table_h48.tex) [5] [6] (./policy_section.tex) [7] [8] [9]
+ [3 <report/figures/cv_diagram.png>] (report/headline_h24.tex) (report/headline
+_h48.tex)
+[4] (report/cv_table_h24.tex) (report/cv_table_h48.tex) [5] [6]
+(report/policy_section.tex) [7] [8] [9]
 <figures/cv_per_family_h24.png, id=160, 930.61523pt x 1196.90239pt>
 File: figures/cv_per_family_h24.png Graphic file (type png)
 <use figures/cv_per_family_h24.png>
@@ -566,8 +568,8 @@ File: figures/cv_family_fold_h24.png Graphic file (type png)
 Package pdftex.def Info: figures/cv_family_fold_h24.png  used on input line 369
 .
 (pdftex.def)             Requested size: 328.82707pt x 409.22522pt.
- [10 <./figures/cv_per_family_h24.png>] [11 <./figures/cv_family_fold_h24.png>]
- (./report.aux)
+ [10 <report/figures/cv_per_family_h24.png>] [11 <report/figures/cv_family_fold
+_h24.png>] (report/report.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-02-20>
@@ -576,13 +578,13 @@ Package rerunfilecheck Info: File `report.out' has not changed.
 (rerunfilecheck)             Checksum: 1F826F35E800C2D8DC77FB7A17985A65;3277.
  ) 
 Here is how much of TeX's memory you used:
- 14504 strings out of 474116
- 230089 string characters out of 5743682
+ 14505 strings out of 474116
+ 230232 string characters out of 5743682
  1949187 words of memory out of 5000000
  36463 multiletter control sequences out of 15000+600000
  576135 words of font info for 178 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 75i,10n,79p,1003b,583s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 75i,10n,79p,1010b,583s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb
 ></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb>
 </usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb><
@@ -601,7 +603,7 @@ ve/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/local/texlive
 4/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt12.pfb></usr/local/texlive/2024
 /texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb></usr/local/texlive/
 2024/texmf-dist/fonts/type1/public/cm-super/sfrm1095.pfb>
-Output written on report.pdf (11 pages, 840404 bytes).
+Output written on report/report.pdf (11 pages, 840404 bytes).
 PDF statistics:
  261 PDF objects out of 1000 (max. 8388607)
  196 compressed objects within 2 object streams
