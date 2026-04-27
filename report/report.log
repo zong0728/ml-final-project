@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2025.1.22)  26 APR 2026 21:37
+This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2025.1.22)  26 APR 2026 22:04
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -557,13 +557,13 @@ Package pdftex.def Info: figures/cv_diagram.png  used on input line 119.
 <figures/cv_per_family_h24.png, id=160, 930.61523pt x 1196.90239pt>
 File: figures/cv_per_family_h24.png Graphic file (type png)
 <use figures/cv_per_family_h24.png>
-Package pdftex.def Info: figures/cv_per_family_h24.png  used on input line 358.
+Package pdftex.def Info: figures/cv_per_family_h24.png  used on input line 359.
 
 (pdftex.def)             Requested size: 366.40834pt x 471.24629pt.
 <figures/cv_family_fold_h24.png, id=161, 859.45708pt x 1069.596pt>
 File: figures/cv_family_fold_h24.png Graphic file (type png)
 <use figures/cv_family_fold_h24.png>
-Package pdftex.def Info: figures/cv_family_fold_h24.png  used on input line 368
+Package pdftex.def Info: figures/cv_family_fold_h24.png  used on input line 369
 .
 (pdftex.def)             Requested size: 328.82707pt x 409.22522pt.
  [10 <./figures/cv_per_family_h24.png>] [11 <./figures/cv_family_fold_h24.png>]
@@ -576,11 +576,11 @@ Package rerunfilecheck Info: File `report.out' has not changed.
 (rerunfilecheck)             Checksum: 1F826F35E800C2D8DC77FB7A17985A65;3277.
  ) 
 Here is how much of TeX's memory you used:
- 14496 strings out of 474116
- 230039 string characters out of 5743682
+ 14504 strings out of 474116
+ 230089 string characters out of 5743682
  1949187 words of memory out of 5000000
  36463 multiletter control sequences out of 15000+600000
- 575931 words of font info for 174 fonts, out of 8000000 for 9000
+ 576135 words of font info for 178 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  75i,10n,79p,1003b,583s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb
@@ -601,7 +601,7 @@ ve/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/local/texlive
 4/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt12.pfb></usr/local/texlive/2024
 /texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb></usr/local/texlive/
 2024/texmf-dist/fonts/type1/public/cm-super/sfrm1095.pfb>
-Output written on report.pdf (11 pages, 831396 bytes).
+Output written on report.pdf (11 pages, 840404 bytes).
 PDF statistics:
  261 PDF objects out of 1000 (max. 8388607)
  196 compressed objects within 2 object streams
